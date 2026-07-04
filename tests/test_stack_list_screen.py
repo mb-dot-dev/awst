@@ -156,3 +156,42 @@ async def test_escape_clears_filter_before_going_back() -> None:
         await pilot.pause()
 
         assert not isinstance(app.screen, StackListScreen)
+
+
+@pytest.mark.asyncio
+async def test_refresh_refetches_and_updates_rows() -> None:
+    gateway = FakeCloudFormationGateway(stacks=[_stack("alpha")])
+    app = StackScreenApp(gateway)
+
+    async with app.run_test() as pilot:
+        await _settle(app)
+        await pilot.pause()
+        assert app.screen.query_one(DataTable).row_count == 1
+
+        gateway.stacks = [_stack("alpha"), _stack("beta")]
+        await pilot.press("r")
+        await _settle(app)
+        await pilot.pause()
+
+        assert gateway.calls == 2
+        assert app.screen.query_one(DataTable).row_count == 2
+
+
+@pytest.mark.asyncio
+async def test_cursor_stays_on_same_stack_after_refresh() -> None:
+    gateway = FakeCloudFormationGateway(stacks=[_stack("alpha"), _stack("beta"), _stack("gamma")])
+    app = StackScreenApp(gateway)
+
+    async with app.run_test() as pilot:
+        await _settle(app)
+        await pilot.pause()
+        await pilot.press("down")  # cursor: alpha -> beta
+        await pilot.pause()
+
+        gateway.stacks = [_stack("alnew"), _stack("alpha"), _stack("beta"), _stack("gamma")]
+        await pilot.press("r")
+        await _settle(app)
+        await pilot.pause()
+        table = app.screen.query_one(DataTable)
+
+        assert table.get_row_at(table.cursor_row)[0] == "beta"

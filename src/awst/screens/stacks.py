@@ -36,6 +36,7 @@ class StackListScreen(Screen[None]):
 
     BINDINGS: ClassVar[list[BindingType]] = [
         ("escape", "back_or_clear", "Back"),
+        ("r", "refresh", "Refresh"),
         ("slash", "focus_filter", "Filter"),
     ]
 
@@ -47,6 +48,7 @@ class StackListScreen(Screen[None]):
         super().__init__()
         self._gateway = gateway
         self._all_stacks: list[StackSummary] = []
+        self._loaded = False
 
     def compose(self: Self) -> ComposeResult:
         yield Static(id="count")
@@ -70,11 +72,14 @@ class StackListScreen(Screen[None]):
         if event.worker.name != "_fetch_stacks":
             return
         if event.state == WorkerState.SUCCESS:
+            was_loaded = self._loaded
+            self._loaded = True
             self._all_stacks = event.worker.result or []
             table = self.query_one("#stacks", DataTable)
             table.loading = False
             self._render_rows()
-            table.focus()
+            if not was_loaded:
+                table.focus()
         elif event.state == WorkerState.ERROR and event.worker.error is not None:
             raise event.worker.error
 
@@ -82,6 +87,7 @@ class StackListScreen(Screen[None]):
         table = self.query_one("#stacks", DataTable)
         query = self.query_one("#filter", Input).value.strip().lower()
         visible = [stack for stack in self._all_stacks if query in stack.name.lower()]
+        previous = self._cursor_stack_name(table)
         table.clear()
         now = datetime.now(tz=UTC)
         for stack in visible:
@@ -92,9 +98,18 @@ class StackListScreen(Screen[None]):
                 relative_age(stack.updated, now),
                 key=stack.name,
             )
+        names = [stack.name for stack in visible]
+        if previous in names:
+            table.move_cursor(row=names.index(previous))
         total = len(self._all_stacks)
         count = f"{len(visible)} of {total} stacks" if query else f"{total} stacks"
         self.query_one("#count", Static).update(count)
+
+    def _cursor_stack_name(self: Self, table: DataTable) -> str | None:
+        if table.row_count == 0:
+            return None
+        row_key, _ = table.coordinate_to_cell_key(table.cursor_coordinate)
+        return row_key.value
 
     def on_input_changed(self: Self, event: Input.Changed) -> None:
         if event.input.id == "filter":
@@ -102,6 +117,13 @@ class StackListScreen(Screen[None]):
 
     def action_focus_filter(self: Self) -> None:
         self.query_one("#filter", Input).focus()
+
+    def action_refresh(self: Self) -> None:
+        if self._all_stacks:
+            self.query_one("#count", Static).update("refreshing…")
+        else:
+            self.query_one("#stacks", DataTable).loading = True
+        self._fetch_stacks()
 
     def action_back_or_clear(self: Self) -> None:
         filter_input = self.query_one("#filter", Input)

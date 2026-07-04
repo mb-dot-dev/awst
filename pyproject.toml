@@ -8,11 +8,14 @@ authors = [
 ]
 requires-python = ">=3.14"
 dependencies = [
+    "boto3>=1.43.40",
     "textual>=8.2.8",
 ]
 
 [dependency-groups]
 dev = [
+    "boto3-stubs[cloudformation]>=1.43.40",
+    "moto[cloudformation]>=5.2.2",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",

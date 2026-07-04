@@ -92,12 +92,15 @@ class StackListScreen(Screen[None]):
 
     def _show_error(self: Self, error: AwsError) -> None:
         if self._loaded:
-            self.notify(error.message, title="Refresh failed", severity="error")
+            message = error.message if error.hint is None else f"{error.message} ({error.hint})"
+            self.notify(message, title="Refresh failed", severity="error")
             self._render_rows()  # restores the count text over "refreshing…"
             return
         table = self.query_one("#stacks", DataTable)
         table.loading = False
         table.display = False
+        self.query_one("#filter", Input).display = False
+        self.query_one("#count", Static).display = False
         self.set_focus(None)
         panel = self.query_one("#error", Static)
         panel.update(error.message if error.hint is None else f"{error.message}\n{error.hint}")
@@ -142,6 +145,8 @@ class StackListScreen(Screen[None]):
         self.query_one("#error", Static).display = False
         table = self.query_one("#stacks", DataTable)
         table.display = True
+        self.query_one("#filter", Input).display = True
+        self.query_one("#count", Static).display = True
         if self._loaded:
             self.query_one("#count", Static).update("refreshing…")
         else:

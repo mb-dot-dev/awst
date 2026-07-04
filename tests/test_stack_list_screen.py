@@ -50,6 +50,19 @@ async def test_renders_one_row_per_stack_sorted_input_preserved() -> None:
 
 
 @pytest.mark.asyncio
+async def test_empty_account_renders_zero_rows() -> None:
+    gateway = FakeCloudFormationGateway(stacks=[])
+    app = StackScreenApp(gateway)
+
+    async with app.run_test() as pilot:
+        await _settle(app)
+        await pilot.pause()
+
+        assert app.screen.query_one(DataTable).row_count == 0
+        assert "0 stacks" in str(app.screen.query_one("#count", Static).content)
+
+
+@pytest.mark.asyncio
 async def test_count_header_shows_total() -> None:
     gateway = FakeCloudFormationGateway(stacks=[_stack("a"), _stack("b"), _stack("c")])
     app = StackScreenApp(gateway)
@@ -237,6 +250,22 @@ async def test_initial_load_failure_shows_error_panel() -> None:
 
 
 @pytest.mark.asyncio
+async def test_escape_from_error_panel_goes_back() -> None:
+    gateway = FakeCloudFormationGateway(error=AwsError("no credentials", hint="run `aws sso login`"))
+    app = StackScreenApp(gateway)
+
+    async with app.run_test() as pilot:
+        await _settle(app)
+        await pilot.pause()
+        assert app.screen.query_one("#error", Static).display is True
+
+        await pilot.press("escape")
+        await pilot.pause()
+
+        assert not isinstance(app.screen, StackListScreen)
+
+
+@pytest.mark.asyncio
 async def test_retry_after_initial_failure_recovers() -> None:
     gateway = FakeCloudFormationGateway(error=AwsError("boom"))
     app = StackScreenApp(gateway)
@@ -281,3 +310,34 @@ async def test_refresh_failure_keeps_stale_rows_and_notifies(monkeypatch: pytest
         assert table.row_count == 1  # stale rows kept
         assert toasts == ["throttled"]
         assert "1 stacks" in str(app.screen.query_one("#count", Static).content)  # "refreshing…" cleared
+
+
+@pytest.mark.asyncio
+async def test_refresh_failure_while_filtered_preserves_filter_and_count() -> None:
+    gateway = FakeCloudFormationGateway(
+        stacks=[_stack("prod-api"), _stack("prod-network"), _stack("staging-api")],
+    )
+    app = StackScreenApp(gateway)
+
+    async with app.run_test() as pilot:
+        await _settle(app)
+        await pilot.pause()
+
+        await pilot.press("slash")
+        await pilot.press(*"prod")
+        await pilot.pause()
+        filter_input = app.screen.query_one("#filter", Input)
+        count = app.screen.query_one("#count", Static)
+        assert filter_input.value == "prod"
+        assert "2 of 3 stacks" in str(count.content)
+
+        gateway.error = AwsError("throttled")
+        screen = app.screen
+        assert isinstance(screen, StackListScreen)
+        screen.action_refresh()
+        await pilot.pause()
+        await _settle(app)
+        await pilot.pause()
+
+        assert filter_input.value == "prod"
+        assert "2 of 3 stacks" in str(count.content)

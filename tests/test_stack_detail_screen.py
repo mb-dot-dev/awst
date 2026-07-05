@@ -329,3 +329,60 @@ async def test_refresh_after_stack_deleted_notifies_and_pops_back(monkeypatch: p
 
         assert not isinstance(app.screen, StackDetailScreen)
         assert any("no longer exists" in toast for toast in toasts)
+
+
+@pytest.mark.asyncio
+async def test_not_found_refresh_under_confirm_modal_does_not_pop_the_modal(monkeypatch: pytest.MonkeyPatch) -> None:
+    toasts: list[str] = []
+
+    def record_notify(self: App[None], message: str, **kwargs: object) -> None:
+        toasts.append(message)
+
+    monkeypatch.setattr(App, "notify", record_notify)
+    gateway = FakeCloudFormationGateway(detail=_detail())
+    app = DetailScreenApp(gateway)
+
+    async with app.run_test() as pilot:
+        await _settle(app)
+        await pilot.pause()
+
+        await pilot.press("d")  # confirm modal opens
+        await pilot.pause()
+        assert isinstance(app.screen, ConfirmScreen)
+
+        gateway.detail = None
+        gateway.detail_error = StackNotFoundError("Stack alpha does not exist.")
+        screen = app.screen_stack[-2]
+        assert isinstance(screen, StackDetailScreen)
+        screen.action_refresh()  # refresh resolves while the modal is on top
+        await pilot.pause()
+        await _settle(app)
+        await pilot.pause()
+
+        assert isinstance(app.screen, ConfirmScreen)  # modal survived
+        assert any("no longer exists" in toast for toast in toasts)
+
+
+@pytest.mark.asyncio
+async def test_refresh_failure_keeps_stale_detail_and_notifies(monkeypatch: pytest.MonkeyPatch) -> None:
+    toasts: list[str] = []
+
+    def record_notify(self: App[None], message: str, **kwargs: object) -> None:
+        toasts.append(message)
+
+    monkeypatch.setattr(App, "notify", record_notify)
+    gateway = FakeCloudFormationGateway(detail=_detail())
+    app = DetailScreenApp(gateway)
+
+    async with app.run_test() as pilot:
+        await _settle(app)
+        await pilot.pause()
+
+        gateway.detail_error = AwsError("throttled")
+        await pilot.press("r")
+        await _settle(app)
+        await pilot.pause()
+
+        assert isinstance(app.screen, StackDetailScreen)  # stayed put
+        assert "throttled" in toasts
+        assert "CREATE_COMPLETE" in str(app.screen.query_one("#overview-info", Static).content)  # stale data kept

@@ -109,7 +109,8 @@ class StackDetailScreen(Screen[None]):
             error = event.worker.error
             if isinstance(error, StackNotFoundError) and self._loaded:
                 self.notify(f"Stack {self._stack_name} no longer exists.", title="Stack deleted")
-                self.app.pop_screen()
+                if self.app.screen is self:
+                    self.app.pop_screen()
             elif isinstance(error, AwsError):
                 self._show_error(error)
             elif error is not None:

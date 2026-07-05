@@ -13,6 +13,7 @@ from textual.worker import WorkerState
 
 from awst.aws.models import AwsError
 from awst.screens.formatting import relative_age, status_style
+from awst.screens.stack_detail import StackDetailScreen, StackInspector
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
@@ -28,6 +29,10 @@ class StackLister(Protocol):
     """The slice of the CloudFormation gateway this screen needs."""
 
     def list_stacks(self: Self) -> list[StackSummary]: ...
+
+
+class StackGateway(StackLister, StackInspector, Protocol):
+    """Everything the stack screens collectively need from CloudFormation."""
 
 
 class StackListScreen(Screen[None]):
@@ -46,7 +51,7 @@ class StackListScreen(Screen[None]):
     #error { display: none; padding: 1 2; color: $text-error; }
     """
 
-    def __init__(self: Self, gateway: StackLister) -> None:
+    def __init__(self: Self, gateway: StackGateway) -> None:
         super().__init__()
         self._gateway = gateway
         self._all_stacks: list[StackSummary] = []
@@ -138,6 +143,15 @@ class StackListScreen(Screen[None]):
     def on_input_changed(self: Self, event: Input.Changed) -> None:
         if event.input.id == "filter":
             self._render_rows()
+
+    def on_data_table_row_selected(self: Self, event: DataTable.RowSelected) -> None:
+        name = event.row_key.value
+        if name is not None:
+            self.app.push_screen(StackDetailScreen(self._gateway, name))
+
+    def on_screen_resume(self: Self) -> None:
+        if self._loaded:  # skip the initial push; on_mount already fetches
+            self.action_refresh()
 
     def action_focus_filter(self: Self) -> None:
         self.query_one("#filter", Input).focus()

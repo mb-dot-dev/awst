@@ -1,6 +1,5 @@
 """Tests for the CloudFormation stack list screen."""
 
-from datetime import UTC, datetime
 from typing import Self
 
 import pytest
@@ -8,14 +7,10 @@ from rich.text import Text
 from textual.app import App
 from textual.widgets import DataTable, Input, Static
 
-from awst.aws.models import AwsError, StackSummary
+from awst.aws.models import AwsError
+from awst.screens.stack_detail import StackDetailScreen
 from awst.screens.stacks import StackListScreen
-from tests.fakes import FakeCloudFormationGateway
-
-
-def _stack(name: str, status: str = "CREATE_COMPLETE") -> StackSummary:
-    created = datetime(2026, 1, 1, tzinfo=UTC)
-    return StackSummary(name=name, status=status, created=created, updated=created, description=None)
+from tests.fakes import FakeCloudFormationGateway, make_detail, make_stack
 
 
 class StackScreenApp(App[None]):
@@ -36,7 +31,7 @@ async def _settle(app: App[None]) -> None:
 
 @pytest.mark.asyncio
 async def test_renders_one_row_per_stack_in_gateway_order() -> None:
-    gateway = FakeCloudFormationGateway(stacks=[_stack("prod-api"), _stack("prod-network")])
+    gateway = FakeCloudFormationGateway(stacks=[make_stack("prod-api"), make_stack("prod-network")])
     app = StackScreenApp(gateway)
 
     async with app.run_test() as pilot:
@@ -64,7 +59,7 @@ async def test_empty_account_renders_zero_rows() -> None:
 
 @pytest.mark.asyncio
 async def test_count_header_shows_total() -> None:
-    gateway = FakeCloudFormationGateway(stacks=[_stack("a"), _stack("b"), _stack("c")])
+    gateway = FakeCloudFormationGateway(stacks=[make_stack("a"), make_stack("b"), make_stack("c")])
     app = StackScreenApp(gateway)
 
     async with app.run_test() as pilot:
@@ -76,7 +71,7 @@ async def test_count_header_shows_total() -> None:
 
 @pytest.mark.asyncio
 async def test_count_header_uses_singular_for_one_stack() -> None:
-    gateway = FakeCloudFormationGateway(stacks=[_stack("alpha")])
+    gateway = FakeCloudFormationGateway(stacks=[make_stack("alpha")])
     app = StackScreenApp(gateway)
 
     async with app.run_test() as pilot:
@@ -89,7 +84,7 @@ async def test_count_header_uses_singular_for_one_stack() -> None:
 @pytest.mark.asyncio
 async def test_status_cell_is_styled() -> None:
     gateway = FakeCloudFormationGateway(
-        stacks=[_stack("ok"), _stack("bad", status="ROLLBACK_COMPLETE")],
+        stacks=[make_stack("ok"), make_stack("bad", status="ROLLBACK_COMPLETE")],
     )
     app = StackScreenApp(gateway)
 
@@ -124,7 +119,7 @@ async def test_escape_pops_back() -> None:
 @pytest.mark.asyncio
 async def test_filter_narrows_rows_live() -> None:
     gateway = FakeCloudFormationGateway(
-        stacks=[_stack("prod-api"), _stack("prod-network"), _stack("staging-api")],
+        stacks=[make_stack("prod-api"), make_stack("prod-network"), make_stack("staging-api")],
     )
     app = StackScreenApp(gateway)
 
@@ -143,7 +138,7 @@ async def test_filter_narrows_rows_live() -> None:
 
 @pytest.mark.asyncio
 async def test_filter_is_case_insensitive() -> None:
-    gateway = FakeCloudFormationGateway(stacks=[_stack("Prod-API"), _stack("staging")])
+    gateway = FakeCloudFormationGateway(stacks=[make_stack("Prod-API"), make_stack("staging")])
     app = StackScreenApp(gateway)
 
     async with app.run_test() as pilot:
@@ -159,7 +154,7 @@ async def test_filter_is_case_insensitive() -> None:
 
 @pytest.mark.asyncio
 async def test_escape_clears_filter_before_going_back() -> None:
-    gateway = FakeCloudFormationGateway(stacks=[_stack("prod-api"), _stack("staging-api")])
+    gateway = FakeCloudFormationGateway(stacks=[make_stack("prod-api"), make_stack("staging-api")])
     app = StackScreenApp(gateway)
 
     async with app.run_test() as pilot:
@@ -185,7 +180,7 @@ async def test_escape_clears_filter_before_going_back() -> None:
 
 @pytest.mark.asyncio
 async def test_refresh_refetches_and_updates_rows() -> None:
-    gateway = FakeCloudFormationGateway(stacks=[_stack("alpha")])
+    gateway = FakeCloudFormationGateway(stacks=[make_stack("alpha")])
     app = StackScreenApp(gateway)
 
     async with app.run_test() as pilot:
@@ -193,7 +188,7 @@ async def test_refresh_refetches_and_updates_rows() -> None:
         await pilot.pause()
         assert app.screen.query_one(DataTable).row_count == 1
 
-        gateway.stacks = [_stack("alpha"), _stack("beta")]
+        gateway.stacks = [make_stack("alpha"), make_stack("beta")]
         await pilot.press("r")
         await _settle(app)
         await pilot.pause()
@@ -204,7 +199,7 @@ async def test_refresh_refetches_and_updates_rows() -> None:
 
 @pytest.mark.asyncio
 async def test_cursor_stays_on_same_stack_after_refresh() -> None:
-    gateway = FakeCloudFormationGateway(stacks=[_stack("alpha"), _stack("beta"), _stack("gamma")])
+    gateway = FakeCloudFormationGateway(stacks=[make_stack("alpha"), make_stack("beta"), make_stack("gamma")])
     app = StackScreenApp(gateway)
 
     async with app.run_test() as pilot:
@@ -213,7 +208,7 @@ async def test_cursor_stays_on_same_stack_after_refresh() -> None:
         await pilot.press("down")  # cursor: alpha -> beta
         await pilot.pause()
 
-        gateway.stacks = [_stack("alnew"), _stack("alpha"), _stack("beta"), _stack("gamma")]
+        gateway.stacks = [make_stack("alnew"), make_stack("alpha"), make_stack("beta"), make_stack("gamma")]
         await pilot.press("r")
         await _settle(app)
         await pilot.pause()
@@ -224,7 +219,7 @@ async def test_cursor_stays_on_same_stack_after_refresh() -> None:
 
 @pytest.mark.asyncio
 async def test_refresh_does_not_steal_focus_from_filter() -> None:
-    gateway = FakeCloudFormationGateway(stacks=[_stack("alpha")])
+    gateway = FakeCloudFormationGateway(stacks=[make_stack("alpha")])
     app = StackScreenApp(gateway)
 
     async with app.run_test() as pilot:
@@ -287,7 +282,7 @@ async def test_retry_after_initial_failure_recovers() -> None:
         await pilot.pause()
 
         gateway.error = None
-        gateway.stacks = [_stack("alpha")]
+        gateway.stacks = [make_stack("alpha")]
         await pilot.press("r")
         await _settle(app)
         await pilot.pause()
@@ -305,7 +300,7 @@ async def test_refresh_failure_keeps_stale_rows_and_notifies(monkeypatch: pytest
         toasts.append(message)
 
     monkeypatch.setattr(App, "notify", record_notify)
-    gateway = FakeCloudFormationGateway(stacks=[_stack("alpha")])
+    gateway = FakeCloudFormationGateway(stacks=[make_stack("alpha")])
     app = StackScreenApp(gateway)
 
     async with app.run_test() as pilot:
@@ -327,7 +322,7 @@ async def test_refresh_failure_keeps_stale_rows_and_notifies(monkeypatch: pytest
 @pytest.mark.asyncio
 async def test_refresh_failure_while_filtered_preserves_filter_and_count() -> None:
     gateway = FakeCloudFormationGateway(
-        stacks=[_stack("prod-api"), _stack("prod-network"), _stack("staging-api")],
+        stacks=[make_stack("prod-api"), make_stack("prod-network"), make_stack("staging-api")],
     )
     app = StackScreenApp(gateway)
 
@@ -353,3 +348,43 @@ async def test_refresh_failure_while_filtered_preserves_filter_and_count() -> No
 
         assert filter_input.value == "prod"
         assert "2 of 3 stacks" in str(count.content)
+
+
+@pytest.mark.asyncio
+async def test_enter_on_row_opens_detail_screen_for_that_stack() -> None:
+    gateway = FakeCloudFormationGateway(
+        stacks=[make_stack("prod-api"), make_stack("prod-network")], detail=make_detail()
+    )
+    app = StackScreenApp(gateway)
+
+    async with app.run_test() as pilot:
+        await _settle(app)
+        await pilot.pause()
+
+        await pilot.press("enter")
+        await _settle(app)
+        await pilot.pause()
+
+        assert isinstance(app.screen, StackDetailScreen)
+        assert gateway.detail_calls == ["prod-api"]
+
+
+@pytest.mark.asyncio
+async def test_returning_from_detail_refreshes_the_list() -> None:
+    gateway = FakeCloudFormationGateway(stacks=[make_stack("prod-api")], detail=make_detail())
+    app = StackScreenApp(gateway)
+
+    async with app.run_test() as pilot:
+        await _settle(app)
+        await pilot.pause()
+        assert gateway.calls == 1
+
+        await pilot.press("enter")
+        await _settle(app)
+        await pilot.pause()
+        await pilot.press("escape")
+        await _settle(app)
+        await pilot.pause()
+
+        assert isinstance(app.screen, StackListScreen)
+        assert gateway.calls == 2

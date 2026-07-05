@@ -5,9 +5,9 @@ from textual.widgets import DataTable, OptionList
 
 from awst.app import AwstApp
 from awst.screens.home import HomeScreen
+from awst.screens.stack_detail import StackDetailScreen
 from awst.screens.stacks import StackListScreen
-from tests.fakes import FakeCloudFormationGateway
-from tests.test_stack_list_screen import _stack
+from tests.fakes import FakeCloudFormationGateway, make_detail, make_stack
 
 
 @pytest.mark.asyncio
@@ -42,7 +42,7 @@ async def test_disabled_services_are_skipped_by_navigation() -> None:
 
 @pytest.mark.asyncio
 async def test_enter_opens_stack_list_and_escape_returns_home() -> None:
-    gateway = FakeCloudFormationGateway(stacks=[_stack("prod-api")])
+    gateway = FakeCloudFormationGateway(stacks=[make_stack("prod-api")])
     app = AwstApp(cloudformation_gateway=gateway)
 
     async with app.run_test() as pilot:
@@ -58,6 +58,23 @@ async def test_enter_opens_stack_list_and_escape_returns_home() -> None:
         await pilot.pause()
 
         assert isinstance(app.screen, HomeScreen)
+
+
+@pytest.mark.asyncio
+async def test_enter_twice_drills_from_home_into_stack_details() -> None:
+    gateway = FakeCloudFormationGateway(stacks=[make_stack("prod-api")], detail=make_detail())
+    app = AwstApp(cloudformation_gateway=gateway)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("enter")
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        await pilot.press("enter")
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+
+        assert isinstance(app.screen, StackDetailScreen)
 
 
 @pytest.mark.asyncio

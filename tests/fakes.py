@@ -1,13 +1,73 @@
-"""Test fakes for AWS gateways."""
+"""Test fakes and model factories for AWS gateways."""
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Self
 
-from awst.aws.models import StackNotFoundError
+from awst.aws.models import (
+    StackDetail,
+    StackEvent,
+    StackNotFoundError,
+    StackOutput,
+    StackParameter,
+    StackResource,
+    StackSummary,
+)
 
 if TYPE_CHECKING:
-    from awst.aws.models import AwsError, StackDetail, StackSummary
+    from awst.aws.models import AwsError
+
+_CREATED = datetime(2026, 1, 1, tzinfo=UTC)
+_PARAMETERS = (StackParameter(key="Env", value="prod"),)
+_OUTPUTS = (StackOutput(key="Url", value="https://example.com", description="endpoint"),)
+
+
+def make_stack(name: str, status: str = "CREATE_COMPLETE") -> StackSummary:
+    """A stack summary with sensible defaults for list-screen tests."""
+    return StackSummary(name=name, status=status, created=_CREATED, updated=_CREATED, description=None)
+
+
+def make_detail(
+    parameters: tuple[StackParameter, ...] = _PARAMETERS,
+    outputs: tuple[StackOutput, ...] = _OUTPUTS,
+) -> StackDetail:
+    """A fully populated stack detail named "alpha" for detail-screen tests."""
+    return StackDetail(
+        name="alpha",
+        stack_id="arn:aws:cloudformation:eu-west-1:123456789012:stack/alpha/abc",
+        status="CREATE_COMPLETE",
+        status_reason=None,
+        description="a test stack",
+        created=_CREATED,
+        updated=_CREATED,
+        parameters=parameters,
+        outputs=outputs,
+        resources=(
+            StackResource(
+                logical_id="Topic",
+                physical_id="arn:aws:sns:eu-west-1:123456789012:topic",
+                resource_type="AWS::SNS::Topic",
+                status="CREATE_COMPLETE",
+            ),
+        ),
+        events=(
+            StackEvent(
+                timestamp=_CREATED,
+                logical_id="alpha",
+                resource_type="AWS::CloudFormation::Stack",
+                status="CREATE_COMPLETE",
+                reason=None,
+            ),
+            StackEvent(
+                timestamp=_CREATED,
+                logical_id="Topic",
+                resource_type="AWS::SNS::Topic",
+                status="CREATE_IN_PROGRESS",
+                reason="Resource creation Initiated",
+            ),
+        ),
+    )
 
 
 class FakeCloudFormationGateway:

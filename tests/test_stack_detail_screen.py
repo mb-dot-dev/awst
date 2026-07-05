@@ -1,6 +1,5 @@
 """Tests for the CloudFormation stack detail screen."""
 
-from datetime import UTC, datetime
 from typing import Self
 
 import pytest
@@ -8,63 +7,10 @@ from rich.text import Text
 from textual.app import App
 from textual.widgets import DataTable, Static
 
-from awst.aws.models import (
-    AwsError,
-    StackDetail,
-    StackEvent,
-    StackNotFoundError,
-    StackOutput,
-    StackParameter,
-    StackResource,
-)
+from awst.aws.models import AwsError, StackNotFoundError
 from awst.screens.confirm import ConfirmScreen
 from awst.screens.stack_detail import StackDetailScreen
-from tests.fakes import FakeCloudFormationGateway
-
-CREATED = datetime(2026, 1, 1, tzinfo=UTC)
-PARAMETERS = (StackParameter(key="Env", value="prod"),)
-OUTPUTS = (StackOutput(key="Url", value="https://example.com", description="endpoint"),)
-
-
-def _detail(
-    parameters: tuple[StackParameter, ...] = PARAMETERS,
-    outputs: tuple[StackOutput, ...] = OUTPUTS,
-) -> StackDetail:
-    return StackDetail(
-        name="alpha",
-        stack_id="arn:aws:cloudformation:eu-west-1:123456789012:stack/alpha/abc",
-        status="CREATE_COMPLETE",
-        status_reason=None,
-        description="a test stack",
-        created=CREATED,
-        updated=CREATED,
-        parameters=parameters,
-        outputs=outputs,
-        resources=(
-            StackResource(
-                logical_id="Topic",
-                physical_id="arn:aws:sns:eu-west-1:123456789012:topic",
-                resource_type="AWS::SNS::Topic",
-                status="CREATE_COMPLETE",
-            ),
-        ),
-        events=(
-            StackEvent(
-                timestamp=CREATED,
-                logical_id="alpha",
-                resource_type="AWS::CloudFormation::Stack",
-                status="CREATE_COMPLETE",
-                reason=None,
-            ),
-            StackEvent(
-                timestamp=CREATED,
-                logical_id="Topic",
-                resource_type="AWS::SNS::Topic",
-                status="CREATE_IN_PROGRESS",
-                reason="Resource creation Initiated",
-            ),
-        ),
-    )
+from tests.fakes import FakeCloudFormationGateway, make_detail
 
 
 class DetailScreenApp(App[None]):
@@ -85,7 +31,7 @@ async def _settle(app: App[None]) -> None:
 
 @pytest.mark.asyncio
 async def test_overview_shows_status_description_and_stack_id() -> None:
-    app = DetailScreenApp(FakeCloudFormationGateway(detail=_detail()))
+    app = DetailScreenApp(FakeCloudFormationGateway(detail=make_detail()))
 
     async with app.run_test() as pilot:
         await _settle(app)
@@ -99,7 +45,7 @@ async def test_overview_shows_status_description_and_stack_id() -> None:
 
 @pytest.mark.asyncio
 async def test_overview_lists_parameters_and_outputs() -> None:
-    app = DetailScreenApp(FakeCloudFormationGateway(detail=_detail()))
+    app = DetailScreenApp(FakeCloudFormationGateway(detail=make_detail()))
 
     async with app.run_test() as pilot:
         await _settle(app)
@@ -113,7 +59,7 @@ async def test_overview_lists_parameters_and_outputs() -> None:
 
 @pytest.mark.asyncio
 async def test_overview_shows_none_for_missing_parameters_and_outputs() -> None:
-    app = DetailScreenApp(FakeCloudFormationGateway(detail=_detail(parameters=(), outputs=())))
+    app = DetailScreenApp(FakeCloudFormationGateway(detail=make_detail(parameters=(), outputs=())))
 
     async with app.run_test() as pilot:
         await _settle(app)
@@ -127,7 +73,7 @@ async def test_overview_shows_none_for_missing_parameters_and_outputs() -> None:
 
 @pytest.mark.asyncio
 async def test_resources_tab_lists_resources_with_styled_status() -> None:
-    app = DetailScreenApp(FakeCloudFormationGateway(detail=_detail()))
+    app = DetailScreenApp(FakeCloudFormationGateway(detail=make_detail()))
 
     async with app.run_test() as pilot:
         await _settle(app)
@@ -143,7 +89,7 @@ async def test_resources_tab_lists_resources_with_styled_status() -> None:
 
 @pytest.mark.asyncio
 async def test_events_tab_lists_events_in_gateway_order() -> None:
-    app = DetailScreenApp(FakeCloudFormationGateway(detail=_detail()))
+    app = DetailScreenApp(FakeCloudFormationGateway(detail=make_detail()))
 
     async with app.run_test() as pilot:
         await _settle(app)
@@ -158,7 +104,7 @@ async def test_events_tab_lists_events_in_gateway_order() -> None:
 
 @pytest.mark.asyncio
 async def test_refresh_refetches_detail() -> None:
-    gateway = FakeCloudFormationGateway(detail=_detail())
+    gateway = FakeCloudFormationGateway(detail=make_detail())
     app = DetailScreenApp(gateway)
 
     async with app.run_test() as pilot:
@@ -197,7 +143,7 @@ async def test_retry_after_initial_failure_recovers() -> None:
         await pilot.pause()
 
         gateway.detail_error = None
-        gateway.detail = _detail()
+        gateway.detail = make_detail()
         await pilot.press("r")
         await _settle(app)
         await pilot.pause()
@@ -208,7 +154,7 @@ async def test_retry_after_initial_failure_recovers() -> None:
 
 @pytest.mark.asyncio
 async def test_escape_pops_back() -> None:
-    app = DetailScreenApp(FakeCloudFormationGateway(detail=_detail()))
+    app = DetailScreenApp(FakeCloudFormationGateway(detail=make_detail()))
 
     async with app.run_test() as pilot:
         await _settle(app)
@@ -223,7 +169,7 @@ async def test_escape_pops_back() -> None:
 
 @pytest.mark.asyncio
 async def test_d_opens_confirmation_modal_naming_the_stack() -> None:
-    app = DetailScreenApp(FakeCloudFormationGateway(detail=_detail()))
+    app = DetailScreenApp(FakeCloudFormationGateway(detail=make_detail()))
 
     async with app.run_test() as pilot:
         await _settle(app)
@@ -244,7 +190,7 @@ async def test_confirming_delete_calls_gateway_and_notifies(monkeypatch: pytest.
         toasts.append(message)
 
     monkeypatch.setattr(App, "notify", record_notify)
-    gateway = FakeCloudFormationGateway(detail=_detail())
+    gateway = FakeCloudFormationGateway(detail=make_detail())
     app = DetailScreenApp(gateway)
 
     async with app.run_test() as pilot:
@@ -264,7 +210,7 @@ async def test_confirming_delete_calls_gateway_and_notifies(monkeypatch: pytest.
 
 @pytest.mark.asyncio
 async def test_cancelling_delete_does_not_call_gateway() -> None:
-    gateway = FakeCloudFormationGateway(detail=_detail())
+    gateway = FakeCloudFormationGateway(detail=make_detail())
     app = DetailScreenApp(gateway)
 
     async with app.run_test() as pilot:
@@ -289,7 +235,7 @@ async def test_delete_failure_shows_error_toast(monkeypatch: pytest.MonkeyPatch)
         toasts.append(message)
 
     monkeypatch.setattr(App, "notify", record_notify)
-    gateway = FakeCloudFormationGateway(detail=_detail(), delete_error=AwsError("denied"))
+    gateway = FakeCloudFormationGateway(detail=make_detail(), delete_error=AwsError("denied"))
     app = DetailScreenApp(gateway)
 
     async with app.run_test() as pilot:
@@ -314,7 +260,7 @@ async def test_refresh_after_stack_deleted_notifies_and_pops_back(monkeypatch: p
         toasts.append(message)
 
     monkeypatch.setattr(App, "notify", record_notify)
-    gateway = FakeCloudFormationGateway(detail=_detail())
+    gateway = FakeCloudFormationGateway(detail=make_detail())
     app = DetailScreenApp(gateway)
 
     async with app.run_test() as pilot:
@@ -339,7 +285,7 @@ async def test_not_found_refresh_under_confirm_modal_does_not_pop_the_modal(monk
         toasts.append(message)
 
     monkeypatch.setattr(App, "notify", record_notify)
-    gateway = FakeCloudFormationGateway(detail=_detail())
+    gateway = FakeCloudFormationGateway(detail=make_detail())
     app = DetailScreenApp(gateway)
 
     async with app.run_test() as pilot:
@@ -371,7 +317,7 @@ async def test_refresh_failure_keeps_stale_detail_and_notifies(monkeypatch: pyte
         toasts.append(message)
 
     monkeypatch.setattr(App, "notify", record_notify)
-    gateway = FakeCloudFormationGateway(detail=_detail())
+    gateway = FakeCloudFormationGateway(detail=make_detail())
     app = DetailScreenApp(gateway)
 
     async with app.run_test() as pilot:

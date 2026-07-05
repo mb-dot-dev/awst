@@ -18,6 +18,10 @@ class AwsError(Exception):
         self.hint = hint
 
 
+class StackNotFoundError(AwsError):
+    """The named stack does not exist (for example, it finished deleting)."""
+
+
 @dataclass(frozen=True, slots=True)
 class StackSummary:
     """A CloudFormation stack, reduced to what the UI needs."""
@@ -27,3 +31,58 @@ class StackSummary:
     created: datetime
     updated: datetime
     description: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class StackParameter:
+    """One parameter the stack was created or updated with."""
+
+    key: str
+    value: str
+
+
+@dataclass(frozen=True, slots=True)
+class StackOutput:
+    """One output exported by the stack."""
+
+    key: str
+    value: str
+    description: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class StackResource:
+    """One resource managed by the stack."""
+
+    logical_id: str
+    physical_id: str | None
+    resource_type: str
+    status: str
+
+
+@dataclass(frozen=True, slots=True)
+class StackEvent:
+    """One entry from the stack's event history."""
+
+    timestamp: datetime
+    logical_id: str
+    resource_type: str
+    status: str
+    reason: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class StackDetail:
+    """Everything the detail screen shows about one stack."""
+
+    name: str
+    stack_id: str
+    status: str
+    status_reason: str | None
+    description: str | None
+    created: datetime
+    updated: datetime
+    parameters: tuple[StackParameter, ...]
+    outputs: tuple[StackOutput, ...]
+    resources: tuple[StackResource, ...]
+    events: tuple[StackEvent, ...]

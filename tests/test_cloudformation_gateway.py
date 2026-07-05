@@ -5,8 +5,10 @@ import json
 
 import boto3
 from moto import mock_aws
+import pytest
 
 from awst.aws.cloudformation import CloudFormationGateway, _to_summary
+from awst.aws.models import StackNotFoundError, StackParameter
 
 TEMPLATE = json.dumps(
     {
@@ -15,9 +17,27 @@ TEMPLATE = json.dumps(
     }
 )
 
+DETAIL_TEMPLATE = json.dumps(
+    {
+        "Description": "a detailed stack",
+        "Parameters": {"Env": {"Type": "String"}},
+        "Resources": {"Topic": {"Type": "AWS::SNS::Topic"}},
+        "Outputs": {"TopicName": {"Value": {"Ref": "Topic"}, "Description": "the topic"}},
+    }
+)
+
 
 def _gateway() -> CloudFormationGateway:
     return CloudFormationGateway(boto3.client("cloudformation", region_name="eu-west-1"))
+
+
+def _create_detailed_stack() -> None:
+    client = boto3.client("cloudformation", region_name="eu-west-1")
+    client.create_stack(
+        StackName="alpha",
+        TemplateBody=DETAIL_TEMPLATE,
+        Parameters=[{"ParameterKey": "Env", "ParameterValue": "prod"}],
+    )
 
 
 @mock_aws
@@ -61,3 +81,61 @@ def test_to_summary_uses_last_updated_time_when_present() -> None:
     assert summary.created == created
     assert summary.updated == updated
     assert summary.description is None
+
+
+@mock_aws
+def test_get_stack_detail_maps_overview_fields() -> None:
+    _create_detailed_stack()
+
+    detail = _gateway().get_stack_detail("alpha")
+
+    assert detail.name == "alpha"
+    assert detail.status == "CREATE_COMPLETE"
+    assert detail.description == "a detailed stack"
+    assert detail.stack_id.startswith("arn:")
+    assert detail.created.tzinfo is not None
+    assert detail.updated == detail.created
+
+
+@mock_aws
+def test_get_stack_detail_maps_parameters_and_outputs() -> None:
+    _create_detailed_stack()
+
+    detail = _gateway().get_stack_detail("alpha")
+
+    assert detail.parameters == (StackParameter(key="Env", value="prod"),)
+    assert len(detail.outputs) == 1
+    assert detail.outputs[0].key == "TopicName"
+    assert detail.outputs[0].description == "the topic"
+
+
+@mock_aws
+def test_get_stack_detail_lists_resources() -> None:
+    _create_detailed_stack()
+
+    detail = _gateway().get_stack_detail("alpha")
+
+    assert len(detail.resources) == 1
+    resource = detail.resources[0]
+    assert resource.logical_id == "Topic"
+    assert resource.resource_type == "AWS::SNS::Topic"
+    assert resource.status == "CREATE_COMPLETE"
+
+
+@mock_aws
+def test_get_stack_detail_returns_events_newest_first() -> None:
+    _create_detailed_stack()
+
+    detail = _gateway().get_stack_detail("alpha")
+
+    assert detail.events
+    timestamps = [event.timestamp for event in detail.events]
+    assert timestamps == sorted(timestamps, reverse=True)
+    assert detail.events[0].logical_id
+    assert detail.events[0].status
+
+
+@mock_aws
+def test_get_stack_detail_raises_stack_not_found_for_missing_stack() -> None:
+    with pytest.raises(StackNotFoundError):
+        _gateway().get_stack_detail("missing")

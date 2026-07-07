@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Self
 
 from awst.aws.models import (
     BucketSummary,
+    FunctionSummary,
     StackDetail,
     StackEvent,
     StackNotFoundError,
@@ -130,3 +131,23 @@ class FakeS3Gateway:
         if self.error is not None:
             raise self.error
         return list(self.buckets)
+
+
+def make_function(name: str, runtime: str = "python3.14") -> FunctionSummary:
+    """A function summary with sensible defaults for list-screen tests."""
+    return FunctionSummary(name=name, runtime=runtime, memory_mb=128, timeout_s=30, modified=_CREATED)
+
+
+class FakeLambdaGateway:
+    """In-memory stand-in for the real Lambda gateway."""
+
+    def __init__(self: Self, functions: list[FunctionSummary] | None = None, error: AwsError | None = None) -> None:
+        self.functions = functions or []
+        self.error = error
+        self.calls = 0
+
+    def list_functions(self: Self) -> list[FunctionSummary]:
+        self.calls += 1
+        if self.error is not None:
+            raise self.error
+        return list(self.functions)

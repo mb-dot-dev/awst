@@ -11,6 +11,7 @@ from textual.widgets.option_list import Option
 
 from awst.screens.buckets import BucketListScreen
 from awst.screens.functions import FunctionListScreen
+from awst.screens.queues import QueueListScreen
 from awst.screens.stacks import StackListScreen
 
 if TYPE_CHECKING:
@@ -55,7 +56,13 @@ SERVICES = (
         enabled=True,
         screen_factory=lambda app: FunctionListScreen(app.lambda_gateway),
     ),
-    ServiceEntry(option_id="sqs", name="SQS", resource="Queues", enabled=False, screen_factory=None),
+    ServiceEntry(
+        option_id="sqs",
+        name="SQS",
+        resource="Queues",
+        enabled=True,
+        screen_factory=lambda app: QueueListScreen(app.sqs_gateway),
+    ),
 )
 
 

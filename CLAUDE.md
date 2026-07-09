@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-`awst` (AWS Console Terminal UI) is a TUI application built on [Textual](https://textual.textualize.io/). The app opens on a service-menu home screen; implemented services are CloudFormation (stack list), S3 (bucket list), and Lambda (function list). Requires Python >=3.14. Dependency management and packaging use `uv`.
+`awst` (AWS Console Terminal UI) is a TUI application built on [Textual](https://textual.textualize.io/). The app opens on a service-menu home screen; implemented services are CloudFormation (stack list), S3 (bucket list), Lambda (function list), and SQS (queue list). Requires Python >=3.14. Dependency management and packaging use `uv`.
 
 ## Commands
 
@@ -29,8 +29,8 @@ There is no separate typecheck-only Makefile target; `ty check` is invoked as pa
 
 - `src/awst/__init__.py` exposes `main()`, the console-script entry point (`awst` command, see `[project.scripts]` in `pyproject.toml`), which runs `AwstApp` (`src/awst/app.py`).
 - `AwstApp` owns AWS access: it lazily builds gateways (e.g. `CloudFormationGateway`) from a `boto3.Session` using the default credential chain, and hands them to screens. Screens never import boto3/botocore.
-- `src/awst/aws/` is the AWS layer: `models.py` (frozen dataclasses + `AwsError`), `errors.py` (botocore → `AwsError` mapping, reusable by future gateways), and one gateway module per service (`cloudformation.py`, `s3.py`, `lambda_.py`).
-- `src/awst/screens/` holds one Textual `Screen` per page (`home.py`, `stacks.py`, `buckets.py`, `functions.py`), with list screens subclassing `ResourceListScreen` (`resource_list.py`), and pure presentation helpers (`formatting.py`). Screens load data with thread workers (`@work(thread=True, exclusive=True, exit_on_error=False)`) and handle results in `on_worker_state_changed`.
+- `src/awst/aws/` is the AWS layer: `models.py` (frozen dataclasses + `AwsError`), `errors.py` (botocore → `AwsError` mapping, reusable by future gateways), and one gateway module per service (`cloudformation.py`, `s3.py`, `lambda_.py`, `sqs.py`).
+- `src/awst/screens/` holds one Textual `Screen` per page (`home.py`, `stacks.py`, `buckets.py`, `functions.py`, `queues.py`), with list screens subclassing `ResourceListScreen` (`resource_list.py`), and pure presentation helpers (`formatting.py`). Screens load data with thread workers (`@work(thread=True, exclusive=True, exit_on_error=False)`) and handle results in `on_worker_state_changed`.
 - Adding a service = one new gateway module + one new screen module + an entry in `SERVICES` in `screens/home.py`.
 - Tests: UI tests drive the app headlessly with pytest-asyncio + Textual's `run_test()` pilot, injecting `FakeCloudFormationGateway` (`tests/fakes.py`); gateway tests use moto's `mock_aws` (no network). `tests/conftest.py` sets fake AWS credentials for every test.
 

@@ -14,8 +14,8 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "boto3-stubs[cloudformation,lambda,s3]>=1.43.40",
-    "moto[awslambda,cloudformation,s3]>=5.2.2",
+    "boto3-stubs[cloudformation,lambda,s3,sqs]>=1.43.40",
+    "moto[awslambda,cloudformation,s3,sqs]>=5.2.2",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",

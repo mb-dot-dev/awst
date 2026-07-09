@@ -43,6 +43,14 @@ class FunctionSummary:
 
 
 @dataclass(frozen=True, slots=True)
+class QueueSummary:
+    """An SQS queue, reduced to what the UI needs."""
+
+    name: str
+    is_fifo: bool
+
+
+@dataclass(frozen=True, slots=True)
 class StackSummary:
     """A CloudFormation stack, reduced to what the UI needs."""
 

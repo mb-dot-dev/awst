@@ -55,7 +55,7 @@ class ConfirmScreen(ModalScreen[bool]):
         self.dismiss(event.button.id == "yes")
 
     def action_confirm(self: Self) -> None:
-        self.dismiss(True)  # noqa: FBT003
+        self.dismiss(result=True)
 
     def action_cancel(self: Self) -> None:
-        self.dismiss(False)  # noqa: FBT003
+        self.dismiss(result=False)

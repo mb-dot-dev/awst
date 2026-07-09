@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Self
 from awst.aws.models import (
     BucketSummary,
     FunctionSummary,
+    QueueSummary,
     StackDetail,
     StackEvent,
     StackNotFoundError,
@@ -151,3 +152,23 @@ class FakeLambdaGateway:
         if self.error is not None:
             raise self.error
         return list(self.functions)
+
+
+def make_queue(name: str) -> QueueSummary:
+    """A queue summary whose FIFO flag follows the .fifo naming rule."""
+    return QueueSummary(name=name, is_fifo=name.endswith(".fifo"))
+
+
+class FakeSqsGateway:
+    """In-memory stand-in for the real SQS gateway."""
+
+    def __init__(self: Self, queues: list[QueueSummary] | None = None, error: AwsError | None = None) -> None:
+        self.queues = queues or []
+        self.error = error
+        self.calls = 0
+
+    def list_queues(self: Self) -> list[QueueSummary]:
+        self.calls += 1
+        if self.error is not None:
+            raise self.error
+        return list(self.queues)

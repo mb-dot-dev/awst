@@ -31,7 +31,7 @@ class QueueListScreen(ResourceListScreen[QueueSummary]):
     def _list(self: Self) -> list[QueueSummary]:
         return self._gateway.list_queues()
 
-    def _row(self: Self, item: QueueSummary, _now: datetime) -> tuple[str, ...]:  # ty: ignore[invalid-method-override]
+    def _row(self: Self, item: QueueSummary, now: datetime) -> tuple[str, ...]:  # noqa: ARG002 - no timestamp column
         return (item.name, "FIFO" if item.is_fifo else "Standard")
 
     def _item_name(self: Self, item: QueueSummary) -> str:

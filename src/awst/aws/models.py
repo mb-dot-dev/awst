@@ -27,6 +27,19 @@ class StackNotFoundError(AwsError):
 
 
 @dataclass(frozen=True, slots=True)
+class SsoConfig:
+    """The SSO settings a profile uses to log in.
+
+    session_name is set for [sso-session] profiles and None for legacy inline
+    sso_* profiles; the token-cache format differs between the two.
+    """
+
+    start_url: str
+    sso_region: str
+    session_name: str | None
+
+
+@dataclass(frozen=True, slots=True)
 class BucketSummary:
     """An S3 bucket, reduced to what the UI needs."""
 

@@ -23,6 +23,7 @@ _CLIENT_TYPE = "public"
 _GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code"
 _DEFAULT_CACHE_DIR = Path("~/.aws/sso/cache")
 _DEFAULT_POLL_INTERVAL_S = 5
+_MIN_POLL_INTERVAL_S = 1  # a zero/negative service interval must not become a tight poll loop
 
 
 def _utc_iso(moment: datetime) -> str:
@@ -58,7 +59,7 @@ class SsoLoginGateway:
             user_code=authorization["userCode"],
             verification_uri=authorization["verificationUri"],
             verification_uri_complete=authorization["verificationUriComplete"],
-            interval=authorization.get("interval", _DEFAULT_POLL_INTERVAL_S),
+            interval=max(authorization.get("interval", _DEFAULT_POLL_INTERVAL_S), _MIN_POLL_INTERVAL_S),
             expires_at=datetime.now(tz=UTC) + timedelta(seconds=authorization["expiresIn"]),
         )
 
@@ -111,5 +112,8 @@ class SsoLoginGateway:
         directory.mkdir(parents=True, exist_ok=True)
         # SHA-1 is the CLI's cache-filename convention, not a security control.
         path = directory / f"{hashlib.sha1(cache_key.encode()).hexdigest()}.json"  # noqa: S324
-        path.write_text(json.dumps(entry))
+        # Make the file owner-only before the token lands in it (touch mode is
+        # umask-masked and doesn't affect existing files, hence the chmod).
+        path.touch(mode=0o600)
         path.chmod(0o600)
+        path.write_text(json.dumps(entry))

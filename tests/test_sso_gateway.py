@@ -70,6 +70,17 @@ def test_start_device_authorization_registers_and_starts() -> None:
     assert authorization.expires_at > datetime.now(tz=UTC)
 
 
+def test_start_device_authorization_clamps_a_zero_interval() -> None:
+    client = _client()
+    with Stubber(client) as stubber:
+        stubber.add_response("register_client", _REGISTER_RESPONSE, _REGISTER_EXPECTED)
+        stubber.add_response("start_device_authorization", _DEVICE_RESPONSE | {"interval": 0}, _DEVICE_EXPECTED)
+
+        authorization = SsoLoginGateway(client).start_device_authorization(make_sso_config())
+
+    assert authorization.interval == 1
+
+
 def test_start_device_authorization_maps_failures_to_aws_error() -> None:
     client = _client()
     with Stubber(client) as stubber:
@@ -179,6 +190,28 @@ def test_write_token_cache_omits_refresh_token_when_absent(tmp_path: Path) -> No
     expected_name = hashlib.sha1(b"corp").hexdigest() + ".json"  # noqa: S324
     entry = json.loads((tmp_path / expected_name).read_text())
     assert "refreshToken" not in entry
+
+
+def test_write_token_cache_file_is_owner_only(tmp_path: Path) -> None:
+    gateway = SsoLoginGateway(_client(), cache_dir=tmp_path)
+
+    gateway.write_token_cache(make_sso_config(), make_device_authorization(), make_sso_token())
+
+    path = next(tmp_path.iterdir())
+    assert path.stat().st_mode & 0o777 == 0o600
+
+
+def test_write_token_cache_tightens_an_existing_looser_cache_file(tmp_path: Path) -> None:
+    config = make_sso_config()
+    existing = tmp_path / (hashlib.sha1(config.start_url.encode()).hexdigest() + ".json")  # noqa: S324
+    existing.write_text("{}")
+    existing.chmod(0o644)
+    gateway = SsoLoginGateway(_client(), cache_dir=tmp_path)
+
+    gateway.write_token_cache(config, make_device_authorization(), make_sso_token())
+
+    assert existing.stat().st_mode & 0o777 == 0o600
+    assert json.loads(existing.read_text())["accessToken"] == "access-token"
 
 
 def test_write_token_cache_creates_the_cache_directory(tmp_path: Path) -> None:

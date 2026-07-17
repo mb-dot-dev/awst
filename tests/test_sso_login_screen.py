@@ -73,9 +73,18 @@ async def test_shows_code_and_url_and_opens_browser(opened_urls: list[str]) -> N
     async with app.run_test() as pilot:
         await _until_code_shown(app, pilot)
 
-        assert "ABCD-EFGH" in str(app.screen.query_one("#code", Static).content)
+        code_widget = app.screen.query_one("#code", Static)
+        assert "ABCD-EFGH" in str(code_widget.content)
         assert str(app.screen.query_one("#url", Static).content) == authorization.verification_uri_complete
         assert opened_urls == [authorization.verification_uri_complete]
+
+        # The content being set is not enough: a zero-size widget renders nothing.
+        await pilot.pause()
+        assert code_widget.region.width > 0
+        assert code_widget.region.height > 0
+        screenshot = app.export_screenshot()
+        assert "ABCD-EFGH" in screenshot
+        assert authorization.verification_uri_complete in screenshot
 
 
 @pytest.mark.asyncio

@@ -57,6 +57,7 @@ class SsoLoginScreen(ModalScreen[bool]):
         background: $panel;
         border: thick $primary;
     }
+    #dialog Static { width: auto; }
     #title { text-style: bold; }
     #status { color: $text-muted; margin-top: 1; }
     #code { text-style: bold; margin-top: 1; }

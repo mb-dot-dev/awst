@@ -48,7 +48,6 @@ class EmptyBucketScreen(ModalScreen[None]):
         self._gateway = gateway
         self._bucket_name = bucket_name
         self._deleted = 0
-        self._worker: Worker[None] | None = None
 
     def compose(self: Self) -> ComposeResult:
         with Vertical(id="dialog"):
@@ -57,7 +56,7 @@ class EmptyBucketScreen(ModalScreen[None]):
         yield Footer()
 
     def on_mount(self: Self) -> None:
-        self._worker = self._empty()
+        self._empty()
 
     @work(thread=True, exclusive=True, exit_on_error=False)
     def _empty(self: Self) -> None:
@@ -96,5 +95,4 @@ class EmptyBucketScreen(ModalScreen[None]):
                 raise error
 
     def action_cancel(self: Self) -> None:
-        if self._worker is not None:
-            self._worker.cancel()
+        self.workers.cancel_node(self)

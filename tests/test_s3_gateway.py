@@ -125,8 +125,10 @@ def test_empty_bucket_deletes_in_batches_of_1000() -> None:
 
 @mock_aws
 def test_empty_bucket_maps_missing_bucket_to_aws_error() -> None:
+    deletions = _gateway().empty_bucket("missing")  # lazy: nothing raises until iterated
+
     with pytest.raises(AwsError):
-        list(_gateway().empty_bucket("missing"))
+        list(deletions)
 
 
 def test_empty_bucket_raises_on_partial_failure() -> None:
@@ -141,8 +143,10 @@ def test_empty_bucket_raises_on_partial_failure() -> None:
             {"Errors": [{"Key": "locked", "VersionId": "v1", "Code": "AccessDenied", "Message": "Access Denied"}]},
         )
 
+        deletions = S3Gateway(client).empty_bucket("alpha")  # lazy: nothing raises until iterated
+
         with pytest.raises(AwsError) as excinfo:
-            list(S3Gateway(client).empty_bucket("alpha"))
+            list(deletions)
 
     assert "locked" in excinfo.value.message
     assert "Access Denied" in excinfo.value.message

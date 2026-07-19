@@ -40,7 +40,7 @@
 
 - [ ] **Step 1: Scrub `AWS_REGION` in the shared fixture**
 
-`AWS_REGION` takes precedence over `AWS_DEFAULT_REGION` in botocore's resolver; if a developer's shell exports it, region tests would see it. In `tests/conftest.py`, add one line directly after the existing `monkeypatch.setenv("AWS_DEFAULT_REGION", "eu-west-1")` line:
+The scrub guards against a shell-exported `AWS_REGION` mattering to other tools and any future botocore behavior; if a developer's shell exports it, region tests should not depend on it being ignored. In `tests/conftest.py`, add one line directly after the existing `monkeypatch.setenv("AWS_DEFAULT_REGION", "eu-west-1")` line:
 
 ```python
     monkeypatch.delenv("AWS_REGION", raising=False)

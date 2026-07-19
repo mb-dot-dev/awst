@@ -49,7 +49,7 @@ Mirrors `profiles.py`:
 
 ### Screen — new `src/awst/screens/regions.py`
 
-`RegionSelectScreen(Screen[str])`, a near-clone of `ProfileSelectScreen`:
+`RegionSelectScreen(Screen[str | None])`, a near-clone of `ProfileSelectScreen`:
 
 - Prompt text ("Select an AWS region") over an `OptionList` of all regions.
 - The currently active region is preselected (cursor on it).

@@ -184,6 +184,23 @@ async def test_ctrl_g_opens_the_region_picker_from_home() -> None:
 
 
 @pytest.mark.asyncio
+async def test_ctrl_g_while_picker_open_does_not_push_a_second_picker() -> None:
+    app = AwstApp(cloudformation_gateway=FakeCloudFormationGateway())
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("ctrl+g")
+        await pilot.pause()
+        assert isinstance(app.screen, RegionSelectScreen)
+        picker = app.screen
+
+        await pilot.press("ctrl+g")
+        await pilot.pause()
+
+        assert app.screen is picker
+
+
+@pytest.mark.asyncio
 async def test_switching_region_from_a_list_screen_returns_home() -> None:
     gateway = FakeCloudFormationGateway(stacks=[make_stack("prod-api")])
     app = AwstApp(cloudformation_gateway=gateway)

@@ -128,12 +128,12 @@ class AwstApp(App[None]):
 
     def check_action(self: Self, action: str, parameters: tuple[object, ...]) -> bool | None:  # noqa: ARG002
         if action == "switch_region":
+            if isinstance(self.screen, RegionSelectScreen):
+                return False
             return any(isinstance(screen, HomeScreen) for screen in self.screen_stack)
         return True
 
     def action_switch_region(self: Self) -> None:
-        if isinstance(self.screen, RegionSelectScreen):
-            return
         picker = RegionSelectScreen(regions.available_regions(), regions.active_region())
         self.push_screen(picker, self._on_region_selected)
 

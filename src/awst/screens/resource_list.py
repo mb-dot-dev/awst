@@ -44,6 +44,7 @@ class ResourceListScreen[ItemT](Screen[None]):
         self._all_items: list[ItemT] = []
         self._loaded = False
         self._show_login = False
+        self._loading_more = False
 
     def _list(self: Self) -> list[ItemT]:
         """Fetch every item from the gateway; called on a worker thread."""
@@ -76,7 +77,7 @@ class ResourceListScreen[ItemT](Screen[None]):
         if action == "login":
             return self._show_login
         if action == "load_more":
-            return self._has_more()
+            return self._has_more() and not self._loading_more
         return True
 
     def on_mount(self: Self) -> None:
@@ -96,21 +97,26 @@ class ResourceListScreen[ItemT](Screen[None]):
         return self._list_more()
 
     def action_load_more(self: Self) -> None:
-        if not self._has_more():
+        if not self._has_more() or self._loading_more:
             return
+        self._loading_more = True
+        self.refresh_bindings()
+        # No table.loading spinner here: it would hide the rows already loaded on screen.
         self.query_one("#count", Static).update("loading more…")
         self._fetch_more()
 
     def on_worker_state_changed(self: Self, event: Worker.StateChanged) -> None:
         if event.worker.name not in {"_fetch_items", "_fetch_more"}:
             return
+        is_more = event.worker.name == "_fetch_more"
         if event.state == WorkerState.SUCCESS:
             self._show_login = False
             was_loaded = self._loaded
             self._loaded = True
             result = event.worker.result or []
-            if event.worker.name == "_fetch_more":
+            if is_more:
                 self._all_items = [*self._all_items, *result]
+                self._loading_more = False
             else:
                 self._all_items = result
             self.refresh_bindings()
@@ -120,11 +126,19 @@ class ResourceListScreen[ItemT](Screen[None]):
             if not was_loaded:
                 table.focus()
         elif event.state == WorkerState.ERROR:
+            if is_more:
+                self._loading_more = False
+                self.refresh_bindings()
             error = event.worker.error
             if isinstance(error, AwsError):
                 self._show_error(error)
             elif error is not None:
                 raise error
+        elif event.state == WorkerState.CANCELLED and is_more:
+            # The load-more thread may still be running (cancellation is cooperative); clear the
+            # flag now so the user can retry without waiting for the zombie thread to finish.
+            self._loading_more = False
+            self.refresh_bindings()
 
     def _show_error(self: Self, error: AwsError) -> None:
         self._show_login = isinstance(error, CredentialsError) and bool(getattr(self.app, "sso_login_possible", False))

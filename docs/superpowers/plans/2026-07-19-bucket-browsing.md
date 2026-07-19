@@ -1104,3 +1104,16 @@ Expected: `make test` (lint + unit) fully green before committing.
 - [ ] `make test` passes (lint + full suite).
 - [ ] `make coverage` stays above the 75% gate.
 - [ ] Manual smoke (optional, needs AWS credentials): `uv run awst` → S3 → Enter a bucket → drill into a folder → escape back → `m` on a >1000-key level.
+
+## Post-review amendments
+
+A final review found that cancelled/concurrent load-more could corrupt paging state (double-`m`,
+or `r` during an in-flight `m`). `ResourceListScreen` now tracks `_loading_more`: `action_load_more`
+and `check_action("load_more", …)` both refuse to start a second fetch while one is outstanding,
+and the flag is cleared on SUCCESS, ERROR, *and* CANCELLED so it can't stick after a refresh
+cancels a load-more. `ObjectListScreen._list`/`_list_more` skip writing `self._continuation_token`
+when `get_current_worker().is_cancelled`, so a zombie thread that outlives its cancellation can no
+longer overwrite a token set by a later fetch. Added `test_load_more_failure_keeps_rows_and_notifies`
+and `test_second_m_press_is_ignored_while_a_load_more_is_in_flight` (`tests/test_resource_list_paging.py`)
+and `test_refresh_during_in_flight_load_more_keeps_paging_consistent` (`tests/test_object_list_screen.py`,
+using a new `FakeS3Gateway.objects_gate`).

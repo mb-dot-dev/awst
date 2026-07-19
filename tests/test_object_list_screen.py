@@ -1,10 +1,13 @@
 """Tests for the S3 object list screen."""
 
+import contextlib
+import threading
 from typing import Self
 
 import pytest
 from textual.app import App
 from textual.widgets import DataTable, Static
+from textual.worker import WorkerCancelled, WorkerFailed
 
 from awst.aws.models import AwsError, ObjectPage
 from awst.screens.objects import ObjectListScreen
@@ -147,3 +150,37 @@ async def test_sub_title_shows_bucket_and_prefix() -> None:
         await pilot.pause()
 
         assert app.screen.sub_title == "assets/docs/"
+
+
+@pytest.mark.asyncio
+async def test_refresh_during_in_flight_load_more_keeps_paging_consistent() -> None:
+    first = ObjectPage(folders=(), objects=(make_object("a.txt"), make_object("b.txt")), continuation_token="t1")
+    second = ObjectPage(folders=(), objects=(make_object("c.txt"),), continuation_token=None)
+    gate = threading.Event()
+    gateway = FakeS3Gateway(object_pages={("", None): first, ("", "t1"): second}, objects_gate=gate)
+    app = ObjectScreenApp(gateway)
+
+    async with app.run_test() as pilot:
+        await _settle(app)
+        await pilot.pause()
+
+        await pilot.press("m")  # the zombie load-more worker blocks in the gateway on token "t1"
+        await pilot.pause()
+
+        await pilot.press("r")  # cancels the load-more; the first-page fetch completes and resets the token to "t1"
+        with contextlib.suppress(WorkerCancelled, WorkerFailed):
+            await app.workers.wait_for_complete()
+        await pilot.pause()
+
+        gate.set()  # release the zombie: without the guard it would overwrite the token with None
+        with contextlib.suppress(WorkerCancelled, WorkerFailed):
+            await app.workers.wait_for_complete()
+        await pilot.pause(0.2)  # give the now-unblocked background thread time to run its (discarded) write
+
+        assert app.screen.check_action("load_more", ()) is True
+
+        await pilot.press("m")
+        await _settle(app)
+        await pilot.pause()
+
+        assert app.gateway.object_calls[-1] == ("assets", "eu-west-1", "", "t1")

@@ -142,6 +142,7 @@ class FakeS3Gateway:
         empty_gate: threading.Event | None = None,
         object_pages: dict[tuple[str, str | None], ObjectPage] | None = None,
         objects_error: AwsError | None = None,
+        objects_gate: threading.Event | None = None,
     ) -> None:
         self.buckets = buckets or []
         self.error = error
@@ -150,6 +151,7 @@ class FakeS3Gateway:
         self.empty_gate = empty_gate
         self.object_pages = object_pages or {}
         self.objects_error = objects_error
+        self.objects_gate = objects_gate
         self.object_calls: list[tuple[str, str, str, str | None]] = []
         self.calls = 0
         self.emptied: list[str] = []
@@ -170,6 +172,8 @@ class FakeS3Gateway:
         self.object_calls.append((bucket, region, prefix, continuation_token))
         if self.objects_error is not None:
             raise self.objects_error
+        if continuation_token is not None and self.objects_gate is not None:
+            self.objects_gate.wait(timeout=5)  # lets tests freeze a load-more mid-flight
         empty = ObjectPage(folders=(), objects=(), continuation_token=None)
         return self.object_pages.get((prefix, continuation_token), empty)
 

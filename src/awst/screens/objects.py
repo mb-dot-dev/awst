@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, Self
 
 from textual.widgets import DataTable  # noqa: TC002 -- needed at runtime: Textual inspects handler annotations
+from textual.worker import get_current_worker
 
 from awst.aws.models import ObjectSummary
 from awst.screens.formatting import human_size, relative_age
@@ -55,7 +56,10 @@ class ObjectListScreen(ResourceListScreen[ObjectEntry]):
 
     def _list(self: Self) -> list[ObjectEntry]:
         page = self._gateway.list_objects(self._bucket, self._region, self._prefix)
-        self._continuation_token = page.continuation_token
+        # A cancelled worker's result is discarded by the base anyway; skip the state write so a
+        # zombie thread that outlives its cancellation can't clobber a token set by a later fetch.
+        if not get_current_worker().is_cancelled:
+            self._continuation_token = page.continuation_token
         return self._entries(page)
 
     def _has_more(self: Self) -> bool:
@@ -63,7 +67,8 @@ class ObjectListScreen(ResourceListScreen[ObjectEntry]):
 
     def _list_more(self: Self) -> list[ObjectEntry]:
         page = self._gateway.list_objects(self._bucket, self._region, self._prefix, self._continuation_token)
-        self._continuation_token = page.continuation_token
+        if not get_current_worker().is_cancelled:
+            self._continuation_token = page.continuation_token
         return self._entries(page)
 
     def _entries(self: Self, page: ObjectPage) -> list[ObjectEntry]:

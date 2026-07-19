@@ -21,10 +21,11 @@ destructive operation.
 
 ## Trigger & flow
 
-`BucketListScreen` gains an `e` binding ("Empty") acting on the cursor row. It pushes an
-`EmptyBucketScreen` modal (patterned on `SsoLoginScreen`): title "Empty bucket", the bucket
-name, a warning that all objects, versions, and delete markers will be permanently deleted,
-and a yes/no choice — `y` confirms, `escape` or `n` cancels. Nothing is deleted until `y`.
+`BucketListScreen` gains an `e` binding ("Empty") acting on the cursor row. It pushes the
+existing reusable `ConfirmScreen` (already used for stack deletion) asking "Permanently delete
+all objects, versions, and delete markers in {name}?" — `y` confirms, `escape` or `n` cancels.
+On confirm, an `EmptyBucketScreen` progress modal (patterned on `SsoLoginScreen`) is pushed
+and deletion starts. Nothing is deleted until `y`.
 
 With no rows in the table, `e` does nothing. While the filter input has focus, keys go to the
 input (standard Textual focus behavior), so typing "e" in the filter never triggers the action.

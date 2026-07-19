@@ -16,6 +16,7 @@ def _aws_test_credentials(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> No
     monkeypatch.setenv("AWS_SECURITY_TOKEN", "testing")
     monkeypatch.setenv("AWS_SESSION_TOKEN", "testing")
     monkeypatch.setenv("AWS_DEFAULT_REGION", "eu-west-1")
+    monkeypatch.delenv("AWS_REGION", raising=False)
     monkeypatch.setenv("AWS_CONFIG_FILE", str(tmp_path / "aws-config"))
     monkeypatch.setenv("AWS_SHARED_CREDENTIALS_FILE", str(tmp_path / "aws-credentials"))
     # setenv-then-delenv registers the original (absent) value with monkeypatch, so any

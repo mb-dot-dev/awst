@@ -9,6 +9,7 @@ from awst.aws.models import BucketSummary
 from awst.screens.confirm import ConfirmScreen
 from awst.screens.empty_bucket import BucketEmptier, EmptyBucketScreen
 from awst.screens.formatting import relative_age
+from awst.screens.objects import ObjectLister, ObjectListScreen
 from awst.screens.resource_list import ResourceListScreen
 
 if TYPE_CHECKING:
@@ -23,7 +24,7 @@ class BucketLister(Protocol):
     def list_buckets(self: Self) -> list[BucketSummary]: ...
 
 
-class BucketGateway(BucketLister, BucketEmptier, Protocol):
+class BucketGateway(BucketLister, BucketEmptier, ObjectLister, Protocol):
     """Everything the bucket screens collectively need from S3."""
 
 
@@ -48,6 +49,12 @@ class BucketListScreen(ResourceListScreen[BucketSummary]):
 
     def _item_name(self: Self, item: BucketSummary) -> str:
         return item.name
+
+    def on_data_table_row_selected(self: Self, event: DataTable.RowSelected) -> None:
+        name = event.row_key.value
+        bucket = next((item for item in self._all_items if item.name == name), None)
+        if bucket is not None:
+            self.app.push_screen(ObjectListScreen(self._gateway, bucket.name, bucket.region))
 
     def action_empty(self: Self) -> None:
         name = self._cursor_name(self.query_one("#items", DataTable))

@@ -13,6 +13,7 @@ from awst.aws.models import AwsError
 from awst.screens.buckets import BucketListScreen
 from awst.screens.confirm import ConfirmScreen
 from awst.screens.empty_bucket import EmptyBucketScreen
+from awst.screens.objects import ObjectListScreen
 from tests.fakes import FakeS3Gateway, make_bucket
 
 if TYPE_CHECKING:
@@ -221,9 +222,26 @@ async def test_refresh_failure_keeps_stale_rows_and_notifies(monkeypatch: pytest
 
 
 @pytest.mark.asyncio
-async def test_enter_on_row_does_nothing() -> None:
-    gateway = FakeS3Gateway(buckets=[make_bucket("assets")])
+async def test_enter_on_bucket_opens_the_object_browser_in_its_region() -> None:
+    gateway = FakeS3Gateway(buckets=[make_bucket("assets", region="eu-central-1")])
     app = BucketScreenApp(gateway)
+
+    async with app.run_test() as pilot:
+        await _settle(app)
+        await pilot.pause()
+
+        await pilot.press("enter")
+        await _settle(app)
+        await pilot.pause()
+
+        assert isinstance(app.screen, ObjectListScreen)
+        assert app.screen.sub_title == "assets/"
+        assert gateway.object_calls == [("assets", "eu-central-1", "", None)]
+
+
+@pytest.mark.asyncio
+async def test_enter_with_no_rows_does_nothing() -> None:
+    app = BucketScreenApp(FakeS3Gateway(buckets=[]))
 
     async with app.run_test() as pilot:
         await _settle(app)
@@ -232,7 +250,7 @@ async def test_enter_on_row_does_nothing() -> None:
         await pilot.press("enter")
         await pilot.pause()
 
-        assert isinstance(app.screen, BucketListScreen)  # no detail screen yet
+        assert isinstance(app.screen, BucketListScreen)
 
 
 async def _until_back_on_list(app: App[None], pilot: Pilot[None]) -> None:

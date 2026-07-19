@@ -62,7 +62,10 @@ class AwstApp(App[None]):
         """The S3 gateway, built on first use from the default credential chain."""
         if self._s3_gateway is None:
             session = boto3.Session()
-            self._s3_gateway = S3Gateway(session.client("s3"))
+            self._s3_gateway = S3Gateway(
+                session.client("s3"),
+                regional_client_factory=lambda region: boto3.Session().client("s3", region_name=region),
+            )
         return self._s3_gateway
 
     @property

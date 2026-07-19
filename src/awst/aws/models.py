@@ -75,6 +75,24 @@ class BucketSummary:
 
 
 @dataclass(frozen=True, slots=True)
+class ObjectSummary:
+    """An S3 object, reduced to what the UI needs."""
+
+    key: str  # the full key, including any prefix
+    size: int  # bytes
+    modified: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class ObjectPage:
+    """One page of one prefix level of a bucket listing."""
+
+    folders: tuple[str, ...]  # common prefixes, each ending "/"
+    objects: tuple[ObjectSummary, ...]
+    continuation_token: str | None  # None when this is the last page
+
+
+@dataclass(frozen=True, slots=True)
 class FunctionSummary:
     """A Lambda function, reduced to what the UI needs."""
 

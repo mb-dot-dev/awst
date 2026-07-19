@@ -150,3 +150,116 @@ def test_empty_bucket_raises_on_partial_failure() -> None:
 
     assert "locked" in excinfo.value.message
     assert "Access Denied" in excinfo.value.message
+
+
+@mock_aws
+def test_list_objects_splits_folders_and_objects() -> None:
+    _create_bucket("alpha")
+    client = boto3.client("s3", region_name="eu-west-1")
+    client.put_object(Bucket="alpha", Key="readme.md", Body=b"hi")
+    client.put_object(Bucket="alpha", Key="docs/guide.md", Body=b"hi")
+    client.put_object(Bucket="alpha", Key="logs/2026/app.log", Body=b"hi")
+
+    page = _gateway().list_objects("alpha", "eu-west-1")
+
+    assert page.folders == ("docs/", "logs/")
+    assert [obj.key for obj in page.objects] == ["readme.md"]
+    assert page.continuation_token is None
+
+
+@mock_aws
+def test_list_objects_under_prefix_returns_one_level() -> None:
+    _create_bucket("alpha")
+    client = boto3.client("s3", region_name="eu-west-1")
+    client.put_object(Bucket="alpha", Key="logs/2026/app.log", Body=b"hi")
+    client.put_object(Bucket="alpha", Key="logs/readme.md", Body=b"hi")
+
+    page = _gateway().list_objects("alpha", "eu-west-1", prefix="logs/")
+
+    assert page.folders == ("logs/2026/",)
+    assert [obj.key for obj in page.objects] == ["logs/readme.md"]
+
+
+@mock_aws
+def test_list_objects_filters_out_the_folder_marker() -> None:
+    _create_bucket("alpha")
+    client = boto3.client("s3", region_name="eu-west-1")
+    client.put_object(Bucket="alpha", Key="docs/", Body=b"")  # zero-byte "folder" object
+    client.put_object(Bucket="alpha", Key="docs/guide.md", Body=b"hi")
+
+    page = _gateway().list_objects("alpha", "eu-west-1", prefix="docs/")
+
+    assert [obj.key for obj in page.objects] == ["docs/guide.md"]
+
+
+@mock_aws
+def test_list_objects_maps_fields() -> None:
+    _create_bucket("alpha")
+    client = boto3.client("s3", region_name="eu-west-1")
+    client.put_object(Bucket="alpha", Key="readme.md", Body=b"hello")
+
+    obj = _gateway().list_objects("alpha", "eu-west-1").objects[0]
+
+    assert obj.key == "readme.md"
+    assert obj.size == 5
+    assert obj.modified.tzinfo is not None
+
+
+@mock_aws
+def test_list_objects_paginates_with_continuation_token() -> None:
+    _create_bucket("alpha")
+    client = boto3.client("s3", region_name="eu-west-1")
+    for index in range(1005):
+        client.put_object(Bucket="alpha", Key=f"key-{index:04}", Body=b"")
+
+    first = _gateway().list_objects("alpha", "eu-west-1")
+    second = _gateway().list_objects("alpha", "eu-west-1", continuation_token=first.continuation_token)
+
+    assert len(first.objects) == 1000
+    assert first.continuation_token is not None
+    assert len(second.objects) == 5
+    assert second.continuation_token is None
+
+
+def test_list_objects_maps_client_error_to_aws_error() -> None:
+    client = boto3.client("s3", region_name="eu-west-1")
+    with Stubber(client) as stubber:
+        stubber.add_client_error("list_objects_v2", service_error_code="AccessDenied", service_message="Access Denied")
+
+        with pytest.raises(AwsError) as excinfo:
+            S3Gateway(client).list_objects("alpha", "eu-west-1")
+
+    assert excinfo.value.message == "Access Denied"
+
+
+@mock_aws
+def test_list_objects_uses_regional_client_for_other_regions_and_caches_it() -> None:
+    regions_built: list[str] = []
+
+    def factory(region: str):  # noqa: ANN202 -- returns a boto3 S3 client
+        regions_built.append(region)
+        return boto3.client("s3", region_name=region)
+
+    gateway = S3Gateway(boto3.client("s3", region_name="eu-west-1"), regional_client_factory=factory)
+    remote = boto3.client("s3", region_name="us-east-2")
+    remote.create_bucket(Bucket="remote", CreateBucketConfiguration={"LocationConstraint": "us-east-2"})
+    remote.put_object(Bucket="remote", Key="a.txt", Body=b"hi")
+
+    gateway.list_objects("remote", "us-east-2")
+    page = gateway.list_objects("remote", "us-east-2")
+
+    assert regions_built == ["us-east-2"]  # built once, cached after
+    assert [obj.key for obj in page.objects] == ["a.txt"]
+
+
+@mock_aws
+def test_list_objects_uses_base_client_for_home_and_unknown_regions() -> None:
+    def factory(region: str):  # noqa: ANN202
+        pytest.fail(f"factory should not be called, got region {region!r}")
+
+    gateway = S3Gateway(boto3.client("s3", region_name="eu-west-1"), regional_client_factory=factory)
+    _create_bucket("alpha")
+    boto3.client("s3", region_name="eu-west-1").put_object(Bucket="alpha", Key="a.txt", Body=b"hi")
+
+    assert [obj.key for obj in gateway.list_objects("alpha", "eu-west-1").objects] == ["a.txt"]
+    assert [obj.key for obj in gateway.list_objects("alpha", "").objects] == ["a.txt"]

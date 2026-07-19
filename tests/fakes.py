@@ -20,6 +20,9 @@ from awst.aws.models import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+    import threading
+
     from awst.aws.models import AwsError
 
 _CREATED = datetime(2026, 1, 1, tzinfo=UTC)
@@ -123,16 +126,36 @@ def make_bucket(name: str, region: str = "eu-west-1") -> BucketSummary:
 class FakeS3Gateway:
     """In-memory stand-in for the real S3 gateway."""
 
-    def __init__(self: Self, buckets: list[BucketSummary] | None = None, error: AwsError | None = None) -> None:
+    def __init__(
+        self: Self,
+        buckets: list[BucketSummary] | None = None,
+        error: AwsError | None = None,
+        empty_batches: list[int] | None = None,
+        empty_error: AwsError | None = None,
+        empty_gate: threading.Event | None = None,
+    ) -> None:
         self.buckets = buckets or []
         self.error = error
+        self.empty_batches = empty_batches or []
+        self.empty_error = empty_error
+        self.empty_gate = empty_gate
         self.calls = 0
+        self.emptied: list[str] = []
 
     def list_buckets(self: Self) -> list[BucketSummary]:
         self.calls += 1
         if self.error is not None:
             raise self.error
         return list(self.buckets)
+
+    def empty_bucket(self: Self, name: str) -> Iterator[int]:
+        self.emptied.append(name)
+        for index, count in enumerate(self.empty_batches):
+            if index > 0 and self.empty_gate is not None:
+                self.empty_gate.wait(timeout=5)  # lets tests freeze the worker mid-delete
+            yield count
+        if self.empty_error is not None:
+            raise self.empty_error
 
 
 def make_function(name: str, runtime: str = "python3.14") -> FunctionSummary:

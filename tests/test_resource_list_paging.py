@@ -317,6 +317,30 @@ async def test_count_shows_searching_while_fetching_remaining_pages() -> None:
 
         gate.set()
         await _settle(app)
+
+
+@pytest.mark.asyncio
+async def test_count_stays_searching_across_further_keystrokes_while_fetching() -> None:
+    gate = threading.Event()
+    started = threading.Event()
+    app = PagedApp([["apple"], ["banana"], ["cherry"]], gate=gate, started=started)
+
+    async with app.run_test() as pilot:
+        await _settle(app)
+        await pilot.pause()
+
+        await pilot.press("slash")
+        await pilot.press(*"a")
+        assert started.wait(timeout=5)  # the worker has actually entered _list_more
+        await pilot.pause()
+        assert str(app.screen.query_one("#count", Static).content) == "searching…"
+
+        await pilot.press("p")  # a further keystroke while the fetch is still in flight
+        await pilot.pause()
+        assert str(app.screen.query_one("#count", Static).content) == "searching…"
+
+        gate.set()
+        await _settle(app)
         await pilot.pause()
 
 

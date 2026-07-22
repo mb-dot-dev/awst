@@ -217,6 +217,10 @@ class ResourceListScreen[ItemT](Screen[None]):
         if event.input.id == "filter":
             self._render_rows()
             self._maybe_fetch_remaining()
+            # A fetch already in flight (started by an earlier keystroke) has _loading_more set but
+            # won't re-trigger above; re-show "searching…" so it doesn't flicker back to a stale count.
+            if self._loading_more:
+                self.query_one("#count", Static).update("searching…")
 
     def _maybe_fetch_remaining(self: Self) -> None:
         query = self.query_one("#filter", Input).value.strip()

@@ -184,3 +184,21 @@ async def test_refresh_during_in_flight_load_more_keeps_paging_consistent() -> N
         await pilot.pause()
 
         assert app.gateway.object_calls[-1] == ("assets", "eu-west-1", "", "t1")
+
+
+@pytest.mark.asyncio
+async def test_filtering_does_not_fetch_remaining_pages() -> None:
+    first = ObjectPage(folders=(), objects=(make_object("a.txt"), make_object("b.txt")), continuation_token="t1")
+    app = ObjectScreenApp(FakeS3Gateway(object_pages={("", None): first}))
+
+    async with app.run_test() as pilot:
+        await _settle(app)
+        await pilot.pause()
+
+        await pilot.press("slash")
+        await pilot.press(*"a")
+        await _settle(app)
+        await pilot.pause()
+
+        assert app.gateway.object_calls == [("assets", "eu-west-1", "", None)]  # no auto-fetch of the next page
+        assert app.screen.query_one(DataTable).row_count == 1

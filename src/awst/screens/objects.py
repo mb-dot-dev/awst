@@ -65,6 +65,9 @@ class ObjectListScreen(ResourceListScreen[ObjectEntry]):
     def _has_more(self: Self) -> bool:
         return self._continuation_token is not None
 
+    def _auto_fetch_on_filter(self: Self) -> bool:
+        return False  # a prefix can hold millions of keys; stay scoped to loaded objects
+
     def _list_more(self: Self) -> list[ObjectEntry]:
         page = self._gateway.list_objects(self._bucket, self._region, self._prefix, self._continuation_token)
         if not get_current_worker().is_cancelled:

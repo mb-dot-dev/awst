@@ -6,7 +6,7 @@ import pytest
 from textual.app import App
 from textual.widgets import DataTable, Static
 
-from awst.aws.models import AwsError
+from awst.aws.models import AwsError, Page
 from awst.screens.functions import FunctionListScreen
 from tests.fakes import FakeLambdaGateway, make_function
 
@@ -160,6 +160,65 @@ async def test_refresh_failure_keeps_stale_rows_and_notifies(monkeypatch: pytest
         assert app.screen.query_one(DataTable).row_count == 1  # stale rows kept
         assert toasts == ["throttled"]
         assert str(app.screen.query_one("#count", Static).content) == "1 function"
+
+
+@pytest.mark.asyncio
+async def test_renders_rows_sorted_by_name_even_when_gateway_order_differs() -> None:
+    gateway = FakeLambdaGateway(functions=[make_function("send-mail"), make_function("resize-images")])
+    app = FunctionScreenApp(gateway)
+
+    async with app.run_test() as pilot:
+        await _settle(app)
+        await pilot.pause()
+        table = app.screen.query_one(DataTable)
+
+        assert table.get_row_at(0)[0] == "resize-images"
+        assert table.get_row_at(1)[0] == "send-mail"
+
+
+@pytest.mark.asyncio
+async def test_m_appends_and_resorts_the_next_page() -> None:
+    first = Page(items=(make_function("send-mail"),), next_token="t1")
+    second = Page(items=(make_function("resize-images"),), next_token=None)
+    gateway = FakeLambdaGateway(pages={None: first, "t1": second})
+    app = FunctionScreenApp(gateway)
+
+    async with app.run_test() as pilot:
+        await _settle(app)
+        await pilot.pause()
+        assert str(app.screen.query_one("#count", Static).content) == "1+ function"
+
+        await pilot.press("m")
+        await _settle(app)
+        await pilot.pause()
+        table = app.screen.query_one(DataTable)
+
+        assert gateway.next_tokens == [None, "t1"]
+        assert table.row_count == 2
+        assert table.get_row_at(0)[0] == "resize-images"
+        assert table.get_row_at(1)[0] == "send-mail"
+
+
+@pytest.mark.asyncio
+async def test_filter_fetches_remaining_pages_to_find_matches_beyond_the_first_page() -> None:
+    first = Page(items=(make_function("send-mail"),), next_token="t1")
+    second = Page(items=(make_function("resize-images"),), next_token=None)
+    gateway = FakeLambdaGateway(pages={None: first, "t1": second})
+    app = FunctionScreenApp(gateway)
+
+    async with app.run_test() as pilot:
+        await _settle(app)
+        await pilot.pause()
+
+        await pilot.press("slash")
+        await pilot.press(*"resize")
+        await _settle(app)
+        await pilot.pause()
+        table = app.screen.query_one(DataTable)
+
+        assert gateway.next_tokens == [None, "t1"]
+        assert table.row_count == 1
+        assert table.get_row_at(0)[0] == "resize-images"
 
 
 @pytest.mark.asyncio

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Self
 from botocore.exceptions import BotoCoreError, ClientError
 
 from awst.aws.errors import map_botocore_error
-from awst.aws.models import FunctionSummary
+from awst.aws.models import FunctionSummary, Page
 
 if TYPE_CHECKING:
     from mypy_boto3_lambda import LambdaClient
@@ -19,18 +19,21 @@ class LambdaGateway:
     def __init__(self: Self, client: LambdaClient) -> None:
         self._client = client
 
-    def list_functions(self: Self) -> list[FunctionSummary]:
-        """Return every function in the region, sorted by name.
+    def list_functions(self: Self, next_token: str | None = None) -> Page[FunctionSummary]:
+        """Return one page of functions in the region.
 
         Raises AwsError for any credential, network, or API failure.
         """
         try:
-            paginator = self._client.get_paginator("list_functions")
-            functions = [_to_summary(function) for page in paginator.paginate() for function in page["Functions"]]
+            if next_token is None:
+                response = self._client.list_functions()
+            else:
+                response = self._client.list_functions(Marker=next_token)
+            functions = tuple(_to_summary(function) for function in response.get("Functions", []))
         except (BotoCoreError, ClientError, ValueError) as error:
             # ValueError: _to_summary rejects an unparseable LastModified string
             raise map_botocore_error(error) from error
-        return sorted(functions, key=lambda function: function.name)
+        return Page(items=functions, next_token=response.get("NextMarker"))
 
 
 def _to_summary(function: FunctionConfigurationTypeDef) -> FunctionSummary:

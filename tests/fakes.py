@@ -208,16 +208,26 @@ def make_function(name: str, runtime: str = "python3.14") -> FunctionSummary:
 class FakeLambdaGateway:
     """In-memory stand-in for the real Lambda gateway."""
 
-    def __init__(self: Self, functions: list[FunctionSummary] | None = None, error: AwsError | None = None) -> None:
+    def __init__(
+        self: Self,
+        functions: list[FunctionSummary] | None = None,
+        error: AwsError | None = None,
+        pages: dict[str | None, Page[FunctionSummary]] | None = None,
+    ) -> None:
         self.functions = functions or []
         self.error = error
+        self.pages = pages
         self.calls = 0
+        self.next_tokens: list[str | None] = []
 
-    def list_functions(self: Self) -> list[FunctionSummary]:
+    def list_functions(self: Self, next_token: str | None = None) -> Page[FunctionSummary]:
         self.calls += 1
+        self.next_tokens.append(next_token)
         if self.error is not None:
             raise self.error
-        return list(self.functions)
+        if self.pages is not None:
+            return self.pages.get(next_token, Page(items=(), next_token=None))
+        return Page(items=tuple(self.functions), next_token=None)
 
 
 def make_queue(name: str) -> QueueSummary:

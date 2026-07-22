@@ -45,21 +45,22 @@ def _create_function(name: str, role_arn: str) -> None:
 
 
 @mock_aws
-def test_list_functions_returns_all_functions_sorted_by_name() -> None:
+def test_list_functions_returns_functions_in_api_order_unsorted() -> None:
     role_arn = _role_arn()
     for name in ("gamma", "alpha", "beta"):
         _create_function(name, role_arn)
 
-    functions = _gateway().list_functions()
+    page = _gateway().list_functions()
 
-    assert [function.name for function in functions] == ["alpha", "beta", "gamma"]
+    assert [function.name for function in page.items] == ["gamma", "alpha", "beta"]
+    assert page.next_token is None
 
 
 @mock_aws
 def test_list_functions_maps_fields() -> None:
     _create_function("alpha", _role_arn())
 
-    function = _gateway().list_functions()[0]
+    function = _gateway().list_functions().items[0]
 
     assert function.name == "alpha"
     assert function.runtime == "python3.12"
@@ -70,7 +71,32 @@ def test_list_functions_maps_fields() -> None:
 
 @mock_aws
 def test_list_functions_returns_empty_list_for_empty_account() -> None:
-    assert _gateway().list_functions() == []
+    assert _gateway().list_functions().items == ()
+
+
+def test_list_functions_forwards_marker() -> None:
+    client = boto3.client("lambda", region_name="eu-west-1")
+    with Stubber(client) as stubber:
+        stubber.add_response(
+            "list_functions",
+            {
+                "Functions": [{"FunctionName": "alpha", "LastModified": "2026-01-01T12:00:00.000+0000"}],
+                "NextMarker": "t1",
+            },
+            {},
+        )
+        stubber.add_response(
+            "list_functions",
+            {"Functions": [{"FunctionName": "beta", "LastModified": "2026-01-01T12:00:00.000+0000"}]},
+            {"Marker": "t1"},
+        )
+
+        first = LambdaGateway(client).list_functions()
+        second = LambdaGateway(client).list_functions(first.next_token)
+
+    assert first.next_token == "t1"
+    assert [function.name for function in second.items] == ["beta"]
+    assert second.next_token is None
 
 
 def test_to_summary_parses_last_modified_string() -> None:

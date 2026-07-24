@@ -860,6 +860,9 @@ class DeleteObjectsScreen(ModalScreen[None]):
     def _done_title(self: Self) -> str:
         return f"Deleted {self._target}" if self._target else f"Emptied {self._bucket}"
 
+    def _failed_title(self: Self) -> str:
+        return "Delete failed" if self._target else "Empty bucket failed"
+
     def _deletions(self: Self) -> Iterator[int]:
         """The gateway call for this target; the delimiter tells a folder from an object key."""
         if not self._target:
@@ -902,11 +905,18 @@ class DeleteObjectsScreen(ModalScreen[None]):
             error = event.worker.error
             if isinstance(error, AwsError):
                 message = error.message if error.hint is None else f"{error.message} ({error.hint})"
-                self.notify(message, title="Delete failed", severity="error")
+                self.notify(message, title=self._failed_title(), severity="error")
                 self.dismiss(result=None)
             elif error is not None:
                 raise error
+
+    def action_cancel(self: Self) -> None:
+        """Cancel the in-flight delete worker; the escape binding above triggers this."""
+        self.workers.cancel_node(self)
 ```
+
+The `toasts` fixture in the test file above records `(message, title)` pairs so both
+failure-title branches stay pinned; assert tuples, not bare message strings.
 
 - [ ] **Step 6: Update the bucket screen**
 

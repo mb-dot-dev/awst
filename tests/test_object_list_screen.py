@@ -2,7 +2,7 @@
 
 import contextlib
 import threading
-from typing import Self
+from typing import TYPE_CHECKING, Self
 
 import pytest
 from textual.app import App
@@ -10,8 +10,12 @@ from textual.widgets import DataTable, Static
 from textual.worker import WorkerCancelled, WorkerFailed
 
 from awst.aws.models import AwsError, ObjectPage
+from awst.screens.confirm import ConfirmScreen
 from awst.screens.objects import ObjectListScreen
 from tests.fakes import FakeS3Gateway, make_object
+
+if TYPE_CHECKING:
+    from textual.pilot import Pilot
 
 
 class ObjectScreenApp(App[None]):
@@ -28,6 +32,29 @@ class ObjectScreenApp(App[None]):
 
 async def _settle(app: App[None]) -> None:
     await app.workers.wait_for_complete()
+
+
+@pytest.fixture
+def toasts(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Record notifications instead of rendering toasts."""
+    messages: list[str] = []
+
+    def record_notify(self: App[None], message: str, **kwargs: object) -> None:
+        messages.append(message)
+
+    monkeypatch.setattr(App, "notify", record_notify)
+    return messages
+
+
+async def _until_back_on_list(app: ObjectScreenApp, pilot: Pilot[None]) -> None:
+    """Let the delete modal finish and pop, tolerating cancelled/failed workers."""
+    for _ in range(100):
+        with contextlib.suppress(WorkerFailed, WorkerCancelled):
+            await app.workers.wait_for_complete()
+        await pilot.pause()
+        if isinstance(app.screen, ObjectListScreen):
+            return
+    pytest.fail("never returned to the object list")
 
 
 @pytest.mark.asyncio
@@ -202,3 +229,125 @@ async def test_filtering_does_not_fetch_remaining_pages() -> None:
 
         assert app.gateway.object_calls == [("assets", "eu-west-1", "", None)]  # no auto-fetch of the next page
         assert app.screen.query_one(DataTable).row_count == 1
+
+
+@pytest.mark.asyncio
+async def test_d_on_an_object_confirms_then_deletes_that_key() -> None:
+    page = ObjectPage(folders=(), objects=(make_object("docs/readme.md"),), continuation_token=None)
+    gateway = FakeS3Gateway(object_pages={("docs/", None): page}, delete_batches=[1])
+    app = ObjectScreenApp(gateway, prefix="docs/")
+
+    async with app.run_test() as pilot:
+        await _settle(app)
+        await pilot.pause()
+
+        await pilot.press("d")
+        await pilot.pause()
+        assert isinstance(app.screen, ConfirmScreen)
+        question = str(app.screen.query_one("#question", Static).content)
+        assert question == "Permanently delete docs/readme.md and all its versions?"
+
+        await pilot.press("y")
+        await _until_back_on_list(app, pilot)
+
+        assert gateway.deleted == [("object", "assets", "eu-west-1", "docs/readme.md")]
+
+
+@pytest.mark.asyncio
+async def test_d_on_a_folder_deletes_the_whole_prefix() -> None:
+    page = ObjectPage(folders=("docs/2026/",), objects=(), continuation_token=None)
+    gateway = FakeS3Gateway(object_pages={("docs/", None): page}, delete_batches=[4])
+    app = ObjectScreenApp(gateway, prefix="docs/")
+
+    async with app.run_test() as pilot:
+        await _settle(app)
+        await pilot.pause()
+
+        await pilot.press("d")
+        await pilot.pause()
+        assert isinstance(app.screen, ConfirmScreen)
+        question = str(app.screen.query_one("#question", Static).content)
+        assert question == "Permanently delete everything under docs/2026/, including all versions?"
+
+        await pilot.press("y")
+        await _until_back_on_list(app, pilot)
+
+        assert gateway.deleted == [("prefix", "assets", "eu-west-1", "docs/2026/")]
+
+
+@pytest.mark.asyncio
+async def test_declining_the_confirmation_deletes_nothing() -> None:
+    page = ObjectPage(folders=(), objects=(make_object("readme.md"),), continuation_token=None)
+    gateway = FakeS3Gateway(object_pages={("", None): page}, delete_batches=[1])
+    app = ObjectScreenApp(gateway)
+
+    async with app.run_test() as pilot:
+        await _settle(app)
+        await pilot.pause()
+
+        await pilot.press("d")
+        await pilot.pause()
+        await pilot.press("n")
+        await pilot.pause()
+
+        assert isinstance(app.screen, ObjectListScreen)
+        assert gateway.deleted == []
+        assert len(gateway.object_calls) == 1  # no refresh either
+
+
+@pytest.mark.asyncio
+async def test_d_with_no_rows_does_nothing() -> None:
+    gateway = FakeS3Gateway(object_pages={})
+    app = ObjectScreenApp(gateway)
+
+    async with app.run_test() as pilot:
+        await _settle(app)
+        await pilot.pause()
+        screen = app.screen
+
+        await pilot.press("d")
+        await pilot.pause()
+
+        assert app.screen is screen
+        assert gateway.deleted == []
+
+
+@pytest.mark.asyncio
+async def test_finishing_a_delete_refreshes_the_listing() -> None:
+    page = ObjectPage(folders=(), objects=(make_object("readme.md"),), continuation_token=None)
+    gateway = FakeS3Gateway(object_pages={("", None): page}, delete_batches=[1])
+    app = ObjectScreenApp(gateway)
+
+    async with app.run_test() as pilot:
+        await _settle(app)
+        await pilot.pause()
+
+        await pilot.press("d")
+        await pilot.pause()
+        await pilot.press("y")
+        await _until_back_on_list(app, pilot)
+        await _settle(app)
+        await pilot.pause()
+
+        assert gateway.object_calls == [
+            ("assets", "eu-west-1", "", None),
+            ("assets", "eu-west-1", "", None),
+        ]
+
+
+@pytest.mark.asyncio
+async def test_delete_failure_toasts_and_returns_to_the_list(toasts: list[str]) -> None:
+    page = ObjectPage(folders=(), objects=(make_object("readme.md"),), continuation_token=None)
+    gateway = FakeS3Gateway(object_pages={("", None): page}, delete_error=AwsError("Access Denied"))
+    app = ObjectScreenApp(gateway)
+
+    async with app.run_test() as pilot:
+        await _settle(app)
+        await pilot.pause()
+
+        await pilot.press("d")
+        await pilot.pause()
+        await pilot.press("y")
+        await _until_back_on_list(app, pilot)
+
+        assert "Access Denied" in toasts

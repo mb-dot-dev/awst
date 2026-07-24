@@ -145,9 +145,9 @@ class FakeS3Gateway:
         buckets: list[BucketSummary] | None = None,
         error: AwsError | None = None,
         bucket_pages: dict[str | None, Page[BucketSummary]] | None = None,
-        empty_batches: list[int] | None = None,
-        empty_error: AwsError | None = None,
-        empty_gate: threading.Event | None = None,
+        delete_batches: list[int] | None = None,
+        delete_error: AwsError | None = None,
+        delete_gate: threading.Event | None = None,
         object_pages: dict[tuple[str, str | None], ObjectPage] | None = None,
         objects_error: AwsError | None = None,
         objects_gate: threading.Event | None = None,
@@ -155,16 +155,19 @@ class FakeS3Gateway:
         self.buckets = buckets or []
         self.error = error
         self.bucket_pages = bucket_pages
-        self.empty_batches = empty_batches or []
-        self.empty_error = empty_error
-        self.empty_gate = empty_gate
+        self.delete_batches = delete_batches or []
+        self.delete_error = delete_error
+        self.delete_gate = delete_gate
         self.object_pages = object_pages or {}
         self.objects_error = objects_error
         self.objects_gate = objects_gate
         self.object_calls: list[tuple[str, str, str, str | None]] = []
         self.calls = 0
         self.next_tokens: list[str | None] = []
-        self.emptied: list[str] = []
+        self.emptied: list[tuple[str, str]] = []
+        # First element records which gateway method was called ("object" vs "prefix") so a
+        # test can tell delete_object and delete_prefix calls apart, not just their arguments.
+        self.deleted: list[tuple[str, str, str, str]] = []
 
     def list_buckets(self: Self, next_token: str | None = None) -> Page[BucketSummary]:
         self.calls += 1
@@ -190,14 +193,25 @@ class FakeS3Gateway:
         empty = ObjectPage(folders=(), objects=(), continuation_token=None)
         return self.object_pages.get((prefix, continuation_token), empty)
 
-    def empty_bucket(self: Self, name: str) -> Iterator[int]:
-        self.emptied.append(name)
-        for index, count in enumerate(self.empty_batches):
-            if index > 0 and self.empty_gate is not None:
-                self.empty_gate.wait(timeout=5)  # lets tests freeze the worker mid-delete
+    def empty_bucket(self: Self, name: str, region: str) -> Iterator[int]:
+        self.emptied.append((name, region))
+        return self._deletions()
+
+    def delete_object(self: Self, bucket: str, region: str, key: str) -> Iterator[int]:
+        self.deleted.append(("object", bucket, region, key))
+        return self._deletions()
+
+    def delete_prefix(self: Self, bucket: str, region: str, prefix: str) -> Iterator[int]:
+        self.deleted.append(("prefix", bucket, region, prefix))
+        return self._deletions()
+
+    def _deletions(self: Self) -> Iterator[int]:
+        for index, count in enumerate(self.delete_batches):
+            if index > 0 and self.delete_gate is not None:
+                self.delete_gate.wait(timeout=5)  # lets tests freeze the worker mid-delete
             yield count
-        if self.empty_error is not None:
-            raise self.empty_error
+        if self.delete_error is not None:
+            raise self.delete_error
 
 
 def make_function(name: str, runtime: str = "python3.14") -> FunctionSummary:

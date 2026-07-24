@@ -1,17 +1,22 @@
 """S3 object list screen: one prefix level of one bucket."""
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol, Self
+from functools import partial
+from typing import TYPE_CHECKING, ClassVar, Protocol, Self
 
-from textual.widgets import DataTable  # noqa: TC002 -- needed at runtime: Textual inspects handler annotations
+from textual.widgets import DataTable
 from textual.worker import get_current_worker
 
 from awst.aws.models import ObjectSummary
+from awst.screens.confirm import ConfirmScreen
+from awst.screens.delete_objects import DeleteObjectsScreen, ObjectDeleter
 from awst.screens.formatting import human_size, relative_age
 from awst.screens.resource_list import ResourceListScreen
 
 if TYPE_CHECKING:
     from datetime import datetime
+
+    from textual.binding import BindingType
 
     from awst.aws.models import ObjectPage
 
@@ -28,6 +33,10 @@ class ObjectLister(Protocol):
     ) -> ObjectPage: ...
 
 
+class ObjectBrowserGateway(ObjectLister, ObjectDeleter, Protocol):
+    """Everything the object browser needs from S3; note it never empties a whole bucket."""
+
+
 @dataclass(frozen=True, slots=True)
 class FolderEntry:
     """A common prefix one level below the current one."""
@@ -39,13 +48,15 @@ type ObjectEntry = FolderEntry | ObjectSummary
 
 
 class ObjectListScreen(ResourceListScreen[ObjectEntry]):
-    """Read-only listing of one prefix level; Enter drills into folders, m loads more."""
+    """One prefix level; Enter drills into folders, d deletes a row, m loads more."""
 
     TITLE = "S3 objects"
     COLUMNS = ("Name", "Size", "Modified")
     NOUN = "object"
 
-    def __init__(self: Self, gateway: ObjectLister, bucket: str, region: str, prefix: str = "") -> None:
+    BINDINGS: ClassVar[list[BindingType]] = [("d", "delete", "Delete")]
+
+    def __init__(self: Self, gateway: ObjectBrowserGateway, bucket: str, region: str, prefix: str = "") -> None:
         super().__init__()
         self._gateway = gateway
         self._bucket = bucket
@@ -91,3 +102,30 @@ class ObjectListScreen(ResourceListScreen[ObjectEntry]):
         # (a key ending "/" rolls up into CommonPrefixes when listing with Delimiter="/").
         if name is not None and name.endswith("/"):
             self.app.push_screen(ObjectListScreen(self._gateway, self._bucket, self._region, name))
+
+    def action_delete(self: Self) -> None:
+        """Confirm, then permanently delete the highlighted object key or folder prefix."""
+        target = self._cursor_name(self.query_one("#items", DataTable))
+        if target is None:
+            return
+        if target.endswith("/"):
+            question = f"Permanently delete everything under {target}, including all versions?"
+        else:
+            question = f"Permanently delete {target} and all its versions?"
+        self.app.push_screen(ConfirmScreen(question), partial(self._on_delete_confirmed, target))
+
+    def _on_delete_confirmed(self: Self, target: str, confirmed: bool | None) -> None:  # noqa: FBT001
+        if not confirmed:
+            return
+        # ObjectBrowserGateway omits empty_bucket on purpose (this screen never passes target=""), so
+        # it's not statically a DeleteGateway even though every real implementation has it too.
+        screen = DeleteObjectsScreen(
+            self._gateway,  # ty: ignore[invalid-argument-type]
+            self._bucket,
+            self._region,
+            target,
+        )
+        self.app.push_screen(screen, self._on_delete_finished)
+
+    def _on_delete_finished(self: Self, result: None) -> None:  # noqa: ARG002
+        self.action_refresh()

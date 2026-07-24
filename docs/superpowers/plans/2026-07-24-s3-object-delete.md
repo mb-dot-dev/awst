@@ -54,7 +54,7 @@ Adds the two new gateway methods and folds the existing `empty_bucket` body into
 - Test: `tests/test_s3_gateway.py`
 
 **Interfaces:**
-- Consumes: existing `S3Gateway._client_for(region)`, `S3Gateway._delete_batch(name, keys)`, `map_botocore_error`.
+- Consumes: existing `S3Gateway._client_for(region)`, `S3Gateway._delete_batch(client, name, keys)`, `map_botocore_error`.
 - Produces:
   - `S3Gateway._delete_versions(bucket: str, region: str, prefix: str, match: Callable[[str], bool]) -> Iterator[int]`
   - `S3Gateway.delete_object(bucket: str, region: str, key: str) -> Iterator[int]`
@@ -221,7 +221,7 @@ In `src/awst/aws/s3.py`, replace the whole `empty_bucket` method (currently line
                 ]
                 if not keys:
                     break
-                self._delete_batch(bucket, keys)
+                self._delete_batch(client, bucket, keys)
                 deleted += len(keys)
                 yield deleted
         except (BotoCoreError, ClientError) as error:
@@ -1004,7 +1004,7 @@ The user-facing feature.
 
 **Interfaces:**
 - Consumes: `DeleteObjectsScreen(gateway, bucket, region, target)` and `ObjectDeleter` from Task 3; the existing `ConfirmScreen(question)` from `awst.screens.confirm`, which dismisses `True` on `y` and `False` on `n`/`escape`; `ResourceListScreen._cursor_name(table)`, which returns `None` when the table is empty; `ResourceListScreen.action_refresh()`.
-- Produces: `ObjectBrowserGateway(ObjectLister, ObjectDeleter, Protocol)` and a `d` binding on `ObjectListScreen`.
+- Produces: `ObjectBrowserGateway(ObjectLister, DeleteGateway, Protocol)` and a `d` binding on `ObjectListScreen`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1207,7 +1207,7 @@ if TYPE_CHECKING:
 Add the combined protocol just below the existing `ObjectLister` protocol:
 
 ```python
-class ObjectBrowserGateway(ObjectLister, ObjectDeleter, Protocol):
+class ObjectBrowserGateway(ObjectLister, DeleteGateway, Protocol):
     """Everything the object browser needs from S3; note it never empties a whole bucket."""
 ```
 

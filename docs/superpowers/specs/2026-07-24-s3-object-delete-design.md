@@ -43,8 +43,11 @@ def _delete_versions(
 - Resolves the client through the existing `_client_for(region)`.
 - Repeatedly lists the first page of `list_object_versions(Bucket=bucket, Prefix=prefix,
   MaxKeys=1000)`, keeps the `Versions` and `DeleteMarkers` entries whose `Key` satisfies
-  `match`, deletes them through the existing `_delete_batch`, and yields the cumulative count —
-  the same restart-after-each-batch strategy `empty_bucket` uses today.
+  `match`, deletes them through `_delete_batch`, and yields the cumulative count — the same
+  restart-after-each-batch strategy `empty_bucket` uses today. `_delete_batch` takes the
+  resolved client as its first argument: it previously used `self._client` unconditionally,
+  which would have routed the destructive `DeleteObjects` call to the home region even when
+  the listing went to the bucket's own region.
 - Stops when a page yields no matching items.
 - Botocore errors map through `map_botocore_error`; per-key failures in the `delete_objects`
   response still raise `AwsError` naming the first failed key.
@@ -110,9 +113,14 @@ continuation token. Screens further up the stack are deliberately not refreshed 
 last object in a folder leaves a stale folder row on the parent screen until the user presses
 `r` there.
 
-The screen's gateway type widens from `ObjectLister` to an `ObjectBrowserGateway(ObjectLister,
-ObjectDeleter, Protocol)` — note it does not require `empty_bucket`, which the object browser
-never calls.
+The screen's gateway type widens from `ObjectLister` to
+`ObjectBrowserGateway(ObjectLister, DeleteGateway, Protocol)`. That means it statically
+promises `empty_bucket`, which the object browser itself never calls — the narrower
+`ObjectLister + ObjectDeleter` cannot typecheck, because the shared modal selects its gateway
+call from a runtime string and so must require all three methods. Making the modal take the
+deletion source instead would let both sides stay precise; that is a deliberate follow-up, not
+part of this change. `_on_delete_confirmed` carries a defensive guard refusing a falsy target,
+since an empty target means "whole bucket" to the modal.
 
 ### `screens/buckets.py`
 

@@ -119,6 +119,10 @@ class DeleteObjectsScreen(ModalScreen[None]):
             self.notify(f"{self._count_text()} deleted.", title=self._done_title())
             self.dismiss(result=None)
         elif event.state == WorkerState.CANCELLED:
+            # Cancellation is cooperative: the thread only checks worker.is_cancelled between
+            # batches, so it may still be finishing an in-flight delete_objects call when we
+            # dismiss here. The caller's post-dismiss refresh can therefore briefly list rows
+            # that this batch is about to delete; the "at least" wording sets that expectation.
             self.notify(f"At least {self._count_text()} already deleted.", title="Cancelled", severity="warning")
             self.dismiss(result=None)
         elif event.state == WorkerState.ERROR:

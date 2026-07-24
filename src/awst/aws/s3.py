@@ -139,14 +139,14 @@ class S3Gateway:
                 ]
                 if not keys:
                     break
-                self._delete_batch(bucket, keys)
+                self._delete_batch(client, bucket, keys)
                 deleted += len(keys)
                 yield deleted
         except (BotoCoreError, ClientError) as error:
             raise map_botocore_error(error) from error
 
-    def _delete_batch(self: Self, name: str, keys: list[ObjectIdentifierTypeDef]) -> None:
-        response = self._client.delete_objects(Bucket=name, Delete={"Objects": keys, "Quiet": True})
+    def _delete_batch(self: Self, client: S3Client, name: str, keys: list[ObjectIdentifierTypeDef]) -> None:
+        response = client.delete_objects(Bucket=name, Delete={"Objects": keys, "Quiet": True})
         errors = response.get("Errors", [])
         if errors:
             first = errors[0]

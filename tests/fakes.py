@@ -165,7 +165,9 @@ class FakeS3Gateway:
         self.calls = 0
         self.next_tokens: list[str | None] = []
         self.emptied: list[tuple[str, str]] = []
-        self.deleted: list[tuple[str, str, str]] = []
+        # First element records which gateway method was called ("object" vs "prefix") so a
+        # test can tell delete_object and delete_prefix calls apart, not just their arguments.
+        self.deleted: list[tuple[str, str, str, str]] = []
 
     def list_buckets(self: Self, next_token: str | None = None) -> Page[BucketSummary]:
         self.calls += 1
@@ -196,11 +198,11 @@ class FakeS3Gateway:
         return self._deletions()
 
     def delete_object(self: Self, bucket: str, region: str, key: str) -> Iterator[int]:
-        self.deleted.append((bucket, region, key))
+        self.deleted.append(("object", bucket, region, key))
         return self._deletions()
 
     def delete_prefix(self: Self, bucket: str, region: str, prefix: str) -> Iterator[int]:
-        self.deleted.append((bucket, region, prefix))
+        self.deleted.append(("prefix", bucket, region, prefix))
         return self._deletions()
 
     def _deletions(self: Self) -> Iterator[int]:

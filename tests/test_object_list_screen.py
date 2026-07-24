@@ -244,11 +244,13 @@ async def test_d_on_an_object_confirms_then_deletes_that_key() -> None:
         await pilot.press("d")
         await pilot.pause()
         assert isinstance(app.screen, ConfirmScreen)
+        question = str(app.screen.query_one("#question", Static).content)
+        assert question == "Permanently delete docs/readme.md and all its versions?"
 
         await pilot.press("y")
         await _until_back_on_list(app, pilot)
 
-        assert gateway.deleted == [("assets", "eu-west-1", "docs/readme.md")]
+        assert gateway.deleted == [("object", "assets", "eu-west-1", "docs/readme.md")]
 
 
 @pytest.mark.asyncio
@@ -263,10 +265,14 @@ async def test_d_on_a_folder_deletes_the_whole_prefix() -> None:
 
         await pilot.press("d")
         await pilot.pause()
+        assert isinstance(app.screen, ConfirmScreen)
+        question = str(app.screen.query_one("#question", Static).content)
+        assert question == "Permanently delete everything under docs/2026/, including all versions?"
+
         await pilot.press("y")
         await _until_back_on_list(app, pilot)
 
-        assert gateway.deleted == [("assets", "eu-west-1", "docs/2026/")]
+        assert gateway.deleted == [("prefix", "assets", "eu-west-1", "docs/2026/")]
 
 
 @pytest.mark.asyncio

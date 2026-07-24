@@ -93,7 +93,7 @@ async def test_object_key_target_calls_delete_object(toasts: list[tuple[str, str
     async with app.run_test() as pilot:
         await _until_dismissed(app, pilot)
 
-    assert gateway.deleted == [("assets", "eu-west-1", "docs/readme.md")]
+    assert gateway.deleted == [("object", "assets", "eu-west-1", "docs/readme.md")]
     assert gateway.emptied == []
     assert toasts == [("1 object deleted.", "Deleted docs/readme.md")]
 
@@ -106,7 +106,7 @@ async def test_prefix_target_calls_delete_prefix(toasts: list[tuple[str, str]]) 
     async with app.run_test() as pilot:
         await _until_dismissed(app, pilot)
 
-    assert gateway.deleted == [("assets", "eu-west-1", "docs/2026/")]
+    assert gateway.deleted == [("prefix", "assets", "eu-west-1", "docs/2026/")]
     assert gateway.emptied == []
     assert toasts == [("7 objects deleted.", "Deleted docs/2026/")]
 

@@ -1,6 +1,7 @@
 """Tests for the S3 gateway."""
 
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING, cast
 
 import boto3
 from botocore.stub import Stubber
@@ -10,9 +11,37 @@ import pytest
 from awst.aws.models import AwsError
 from awst.aws.s3 import S3Gateway, _to_summary
 
+if TYPE_CHECKING:
+    from mypy_boto3_s3 import S3Client
+
 
 def _gateway() -> S3Gateway:
     return S3Gateway(boto3.client("s3", region_name="eu-west-1"))
+
+
+class _SpyClient:
+    """Wraps a boto3 S3 client, tagging every list/delete call it forwards with a label.
+
+    Lets a test assert *which* client (home vs. regional) actually issued a
+    given operation, which asserting on side effects in the moto-backed
+    bucket alone cannot distinguish.
+    """
+
+    def __init__(self, client: S3Client, label: str, calls: list[tuple[str, str]]) -> None:
+        self._client = client
+        self._label = label
+        self._calls = calls
+
+    def list_object_versions(self, **kwargs: object) -> object:
+        self._calls.append((self._label, "list_object_versions"))
+        return self._client.list_object_versions(**kwargs)  # ty: ignore[invalid-argument-type]
+
+    def delete_objects(self, **kwargs: object) -> object:
+        self._calls.append((self._label, "delete_objects"))
+        return self._client.delete_objects(**kwargs)  # ty: ignore[invalid-argument-type]
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._client, name)
 
 
 def _create_bucket(name: str) -> None:
@@ -390,3 +419,25 @@ def test_empty_bucket_uses_the_regional_client_for_other_regions() -> None:
     assert regions_built == ["us-east-2"]
     assert counts == [1]
     assert "Contents" not in remote.list_objects_v2(Bucket="remote")
+
+
+@mock_aws
+def test_delete_object_issues_delete_objects_on_the_regional_client_not_the_home_one() -> None:
+    # Listing against the right regional endpoint isn't enough: the destructive delete_objects
+    # call must go to that same regional client too, not the home-region one.
+    calls: list[tuple[str, str]] = []
+    home = cast("S3Client", _SpyClient(boto3.client("s3", region_name="eu-west-1"), "HOME", calls))
+
+    def factory(region: str) -> S3Client:
+        remote = boto3.client("s3", region_name=region)
+        return cast("S3Client", _SpyClient(remote, f"REGIONAL:{region}", calls))
+
+    gateway = S3Gateway(home, regional_client_factory=factory)
+    remote = boto3.client("s3", region_name="us-east-2")
+    remote.create_bucket(Bucket="remote", CreateBucketConfiguration={"LocationConstraint": "us-east-2"})
+    remote.put_object(Bucket="remote", Key="a.txt", Body=b"hi")
+
+    list(gateway.delete_object("remote", "us-east-2", "a.txt"))
+
+    assert ("HOME", "delete_objects") not in calls
+    assert ("REGIONAL:us-east-2", "delete_objects") in calls

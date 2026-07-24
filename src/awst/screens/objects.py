@@ -117,6 +117,10 @@ class ObjectListScreen(ResourceListScreen[ObjectEntry]):
     def _on_delete_confirmed(self: Self, target: str, confirmed: bool | None) -> None:  # noqa: FBT001
         if not confirmed:
             return
+        if not target:  # pragma: no cover -- unreachable: object keys are never empty; see action_delete
+            # An empty target tells the modal to empty the whole bucket, with no confirmation
+            # step of its own; the object browser must never request that.
+            return
         screen = DeleteObjectsScreen(self._gateway, self._bucket, self._region, target)
         self.app.push_screen(screen, self._on_delete_finished)
 

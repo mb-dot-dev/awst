@@ -18,12 +18,12 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture
-def toasts(monkeypatch: pytest.MonkeyPatch) -> list[str]:
-    """Record notifications instead of rendering toasts."""
-    messages: list[str] = []
+def toasts(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
+    """Record (message, title) pairs instead of rendering toasts."""
+    messages: list[tuple[str, str]] = []
 
-    def record_notify(self: App[None], message: str, **kwargs: object) -> None:
-        messages.append(message)
+    def record_notify(self: App[None], message: str, *, title: str = "", **kwargs: object) -> None:
+        messages.append((message, title))
 
     monkeypatch.setattr(App, "notify", record_notify)
     return messages
@@ -63,7 +63,7 @@ async def _until_progress_shows(app: DeleteObjectsApp, pilot: Pilot[None], text:
 
 
 @pytest.mark.asyncio
-async def test_empty_target_empties_the_bucket_and_toasts_final_count(toasts: list[str]) -> None:
+async def test_empty_target_empties_the_bucket_and_toasts_final_count(toasts: list[tuple[str, str]]) -> None:
     gateway = FakeS3Gateway(delete_batches=[500, 1234])
     app = DeleteObjectsApp(gateway)
 
@@ -72,21 +72,21 @@ async def test_empty_target_empties_the_bucket_and_toasts_final_count(toasts: li
 
     assert gateway.emptied == [("assets", "eu-west-1")]
     assert gateway.deleted == []
-    assert toasts == ["1,234 objects deleted."]
+    assert toasts == [("1,234 objects deleted.", "Emptied assets")]
 
 
 @pytest.mark.asyncio
-async def test_already_empty_bucket_reports_zero(toasts: list[str]) -> None:
+async def test_already_empty_bucket_reports_zero(toasts: list[tuple[str, str]]) -> None:
     app = DeleteObjectsApp(FakeS3Gateway(delete_batches=[]))
 
     async with app.run_test() as pilot:
         await _until_dismissed(app, pilot)
 
-    assert toasts == ["0 objects deleted."]
+    assert toasts == [("0 objects deleted.", "Emptied assets")]
 
 
 @pytest.mark.asyncio
-async def test_object_key_target_calls_delete_object(toasts: list[str]) -> None:
+async def test_object_key_target_calls_delete_object(toasts: list[tuple[str, str]]) -> None:
     gateway = FakeS3Gateway(delete_batches=[1])
     app = DeleteObjectsApp(gateway, target="docs/readme.md")
 
@@ -95,11 +95,11 @@ async def test_object_key_target_calls_delete_object(toasts: list[str]) -> None:
 
     assert gateway.deleted == [("assets", "eu-west-1", "docs/readme.md")]
     assert gateway.emptied == []
-    assert toasts == ["1 object deleted."]
+    assert toasts == [("1 object deleted.", "Deleted docs/readme.md")]
 
 
 @pytest.mark.asyncio
-async def test_prefix_target_calls_delete_prefix(toasts: list[str]) -> None:
+async def test_prefix_target_calls_delete_prefix(toasts: list[tuple[str, str]]) -> None:
     gateway = FakeS3Gateway(delete_batches=[7])
     app = DeleteObjectsApp(gateway, target="docs/2026/")
 
@@ -108,7 +108,7 @@ async def test_prefix_target_calls_delete_prefix(toasts: list[str]) -> None:
 
     assert gateway.deleted == [("assets", "eu-west-1", "docs/2026/")]
     assert gateway.emptied == []
-    assert toasts == ["7 objects deleted."]
+    assert toasts == [("7 objects deleted.", "Deleted docs/2026/")]
 
 
 @pytest.mark.asyncio
@@ -140,7 +140,7 @@ async def test_title_names_the_target_when_deleting() -> None:
 
 
 @pytest.mark.asyncio
-async def test_progress_label_updates_per_batch(toasts: list[str]) -> None:
+async def test_progress_label_updates_per_batch(toasts: list[tuple[str, str]]) -> None:
     gate = threading.Event()
     gateway = FakeS3Gateway(delete_batches=[500, 600], delete_gate=gate)
     app = DeleteObjectsApp(gateway)
@@ -151,11 +151,11 @@ async def test_progress_label_updates_per_batch(toasts: list[str]) -> None:
         gate.set()
         await _until_dismissed(app, pilot)
 
-    assert toasts == ["600 objects deleted."]
+    assert toasts == [("600 objects deleted.", "Emptied assets")]
 
 
 @pytest.mark.asyncio
-async def test_escape_cancels_and_reports_partial_count(toasts: list[str]) -> None:
+async def test_escape_cancels_and_reports_partial_count(toasts: list[tuple[str, str]]) -> None:
     gate = threading.Event()
     gateway = FakeS3Gateway(delete_batches=[500, 600], delete_gate=gate)
     app = DeleteObjectsApp(gateway)
@@ -167,15 +167,28 @@ async def test_escape_cancels_and_reports_partial_count(toasts: list[str]) -> No
         gate.set()  # release the frozen worker thread so it can observe the cancel
         await _until_dismissed(app, pilot)
 
-    assert toasts == ["At least 500 objects already deleted."]
+    assert toasts == [("At least 500 objects already deleted.", "Cancelled")]
 
 
 @pytest.mark.asyncio
-async def test_gateway_error_toasts_and_dismisses(toasts: list[str]) -> None:
+async def test_gateway_error_toasts_and_dismisses(toasts: list[tuple[str, str]]) -> None:
     gateway = FakeS3Gateway(delete_error=AwsError("Access Denied"))
     app = DeleteObjectsApp(gateway, target="docs/")
 
     async with app.run_test() as pilot:
         await _until_dismissed(app, pilot)
 
-    assert toasts == ["Access Denied"]
+    assert toasts == [("Access Denied", "Delete failed")]
+
+
+@pytest.mark.asyncio
+async def test_gateway_error_while_emptying_bucket_toasts_empty_bucket_failed(
+    toasts: list[tuple[str, str]],
+) -> None:
+    gateway = FakeS3Gateway(delete_error=AwsError("Access Denied"))
+    app = DeleteObjectsApp(gateway)
+
+    async with app.run_test() as pilot:
+        await _until_dismissed(app, pilot)
+
+    assert toasts == [("Access Denied", "Empty bucket failed")]

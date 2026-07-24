@@ -60,7 +60,7 @@ class DeleteObjectsScreen(ModalScreen[None]):
     #progress { color: $text-muted; margin-top: 1; }
     """
 
-    def __init__(self: Self, gateway: DeleteGateway, bucket: str, region: str, target: str = "") -> None:
+    def __init__(self: Self, gateway: DeleteGateway, bucket: str, region: str, target: str) -> None:
         super().__init__()
         self._gateway = gateway
         self._bucket = bucket

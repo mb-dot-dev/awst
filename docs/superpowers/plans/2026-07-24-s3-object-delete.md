@@ -504,7 +504,7 @@ Pure refactor plus new capability in the modal: no user-visible change to empty-
   - `ObjectDeleter` — `delete_object(bucket: str, region: str, key: str) -> Iterator[int]` and `delete_prefix(bucket: str, region: str, prefix: str) -> Iterator[int]`
   - `DeleteGateway(BucketEmptier, ObjectDeleter, Protocol)`
   - `DeleteObjectsScreen(gateway: DeleteGateway, bucket: str, region: str, target: str = "")` — a `ModalScreen[None]`. `target` is `""` for the whole bucket, a prefix ending `/` for a folder, or an object key.
-  - `FakeS3Gateway` constructor params renamed `empty_batches`/`empty_error`/`empty_gate` → `delete_batches`/`delete_error`/`delete_gate`; new attribute `deleted: list[tuple[str, str, str]]` recording `(bucket, region, target)` for `delete_object` and `delete_prefix`.
+  - `FakeS3Gateway` constructor params renamed `empty_batches`/`empty_error`/`empty_gate` → `delete_batches`/`delete_error`/`delete_gate`; new attribute `deleted: list[tuple[str, str, str, str]]` recording `(method, bucket, region, target)` for `delete_object` and `delete_prefix`, where `method` is `"object"` or `"prefix"` so a test can tell them apart, not just their arguments.
 
 - [ ] **Step 1: Rename the module and its test with git**
 
@@ -613,7 +613,7 @@ async def test_object_key_target_calls_delete_object(toasts: list[str]) -> None:
     async with app.run_test() as pilot:
         await _until_dismissed(app, pilot)
 
-    assert gateway.deleted == [("assets", "eu-west-1", "docs/readme.md")]
+    assert gateway.deleted == [("object", "assets", "eu-west-1", "docs/readme.md")]
     assert gateway.emptied == []
     assert toasts == ["1 object deleted."]
 
@@ -626,7 +626,7 @@ async def test_prefix_target_calls_delete_prefix(toasts: list[str]) -> None:
     async with app.run_test() as pilot:
         await _until_dismissed(app, pilot)
 
-    assert gateway.deleted == [("assets", "eu-west-1", "docs/2026/")]
+    assert gateway.deleted == [("prefix", "assets", "eu-west-1", "docs/2026/")]
     assert gateway.emptied == []
     assert toasts == ["7 objects deleted."]
 
@@ -731,7 +731,9 @@ In `tests/fakes.py`, replace the `FakeS3Gateway` constructor parameters and the 
         self.calls = 0
         self.next_tokens: list[str | None] = []
         self.emptied: list[tuple[str, str]] = []
-        self.deleted: list[tuple[str, str, str]] = []
+        # First element records which gateway method was called ("object" vs "prefix") so a
+        # test can tell delete_object and delete_prefix calls apart, not just their arguments.
+        self.deleted: list[tuple[str, str, str, str]] = []
 ```
 
 and `empty_bucket` is replaced by these three methods plus one shared generator:
@@ -742,11 +744,11 @@ and `empty_bucket` is replaced by these three methods plus one shared generator:
         return self._deletions()
 
     def delete_object(self: Self, bucket: str, region: str, key: str) -> Iterator[int]:
-        self.deleted.append((bucket, region, key))
+        self.deleted.append(("object", bucket, region, key))
         return self._deletions()
 
     def delete_prefix(self: Self, bucket: str, region: str, prefix: str) -> Iterator[int]:
-        self.deleted.append((bucket, region, prefix))
+        self.deleted.append(("prefix", bucket, region, prefix))
         return self._deletions()
 
     def _deletions(self: Self) -> Iterator[int]:
@@ -1065,7 +1067,7 @@ async def test_d_on_an_object_confirms_then_deletes_that_key() -> None:
         await pilot.press("y")
         await _until_back_on_list(app, pilot)
 
-        assert gateway.deleted == [("assets", "eu-west-1", "docs/readme.md")]
+        assert gateway.deleted == [("object", "assets", "eu-west-1", "docs/readme.md")]
 
 
 @pytest.mark.asyncio
@@ -1083,7 +1085,7 @@ async def test_d_on_a_folder_deletes_the_whole_prefix() -> None:
         await pilot.press("y")
         await _until_back_on_list(app, pilot)
 
-        assert gateway.deleted == [("assets", "eu-west-1", "docs/2026/")]
+        assert gateway.deleted == [("prefix", "assets", "eu-west-1", "docs/2026/")]
 
 
 @pytest.mark.asyncio

@@ -164,7 +164,7 @@ class FakeS3Gateway:
         self.object_calls: list[tuple[str, str, str, str | None]] = []
         self.calls = 0
         self.next_tokens: list[str | None] = []
-        self.emptied: list[str] = []
+        self.emptied: list[tuple[str, str]] = []
 
     def list_buckets(self: Self, next_token: str | None = None) -> Page[BucketSummary]:
         self.calls += 1
@@ -190,8 +190,8 @@ class FakeS3Gateway:
         empty = ObjectPage(folders=(), objects=(), continuation_token=None)
         return self.object_pages.get((prefix, continuation_token), empty)
 
-    def empty_bucket(self: Self, name: str) -> Iterator[int]:
-        self.emptied.append(name)
+    def empty_bucket(self: Self, name: str, region: str) -> Iterator[int]:
+        self.emptied.append((name, region))
         for index, count in enumerate(self.empty_batches):
             if index > 0 and self.empty_gate is not None:
                 self.empty_gate.wait(timeout=5)  # lets tests freeze the worker mid-delete

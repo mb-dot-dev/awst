@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 class BucketEmptier(Protocol):
     """The slice of the S3 gateway this screen needs."""
 
-    def empty_bucket(self: Self, name: str) -> Iterator[int]: ...
+    def empty_bucket(self: Self, name: str, region: str) -> Iterator[int]: ...
 
 
 class EmptyBucketScreen(ModalScreen[None]):
@@ -43,10 +43,11 @@ class EmptyBucketScreen(ModalScreen[None]):
     #progress { color: $text-muted; margin-top: 1; }
     """
 
-    def __init__(self: Self, gateway: BucketEmptier, bucket_name: str) -> None:
+    def __init__(self: Self, gateway: BucketEmptier, bucket_name: str, region: str) -> None:
         super().__init__()
         self._gateway = gateway
         self._bucket_name = bucket_name
+        self._region = region
         self._deleted = 0
 
     def compose(self: Self) -> ComposeResult:
@@ -61,7 +62,7 @@ class EmptyBucketScreen(ModalScreen[None]):
     @work(thread=True, exclusive=True, exit_on_error=False)
     def _empty(self: Self) -> None:
         worker = get_current_worker()
-        for count in self._gateway.empty_bucket(self._bucket_name):
+        for count in self._gateway.empty_bucket(self._bucket_name, self._region):
             if worker.is_cancelled:
                 return
             self.app.call_from_thread(self._update_progress, count)

@@ -76,15 +76,17 @@ class BucketListScreen(ResourceListScreen[BucketSummary]):
 
     def action_empty(self: Self) -> None:
         name = self._cursor_name(self.query_one("#items", DataTable))
-        if name is None:
+        bucket = next((item for item in self._all_items if item.name == name), None)
+        if bucket is None:
             return
-        question = f"Permanently delete all objects, versions, and delete markers in {name}?"
-        self.app.push_screen(ConfirmScreen(question), partial(self._on_empty_confirmed, name))
+        question = f"Permanently delete all objects, versions, and delete markers in {bucket.name}?"
+        self.app.push_screen(ConfirmScreen(question), partial(self._on_empty_confirmed, bucket))
 
-    def _on_empty_confirmed(self: Self, name: str, confirmed: bool | None) -> None:  # noqa: FBT001
+    def _on_empty_confirmed(self: Self, bucket: BucketSummary, confirmed: bool | None) -> None:  # noqa: FBT001
         if not confirmed:
             return
-        self.app.push_screen(EmptyBucketScreen(self._gateway, name), self._on_empty_finished)
+        screen = EmptyBucketScreen(self._gateway, bucket.name, bucket.region)
+        self.app.push_screen(screen, self._on_empty_finished)
 
     def _on_empty_finished(self: Self, result: None) -> None:  # noqa: ARG002
         self.action_refresh()

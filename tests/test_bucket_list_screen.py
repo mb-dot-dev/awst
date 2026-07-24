@@ -333,7 +333,7 @@ async def test_confirming_empties_the_bucket_and_refreshes() -> None:
         gate.set()
         await _until_back_on_list(app, pilot)
 
-        assert gateway.emptied == ["assets"]
+        assert gateway.emptied == [("assets", "eu-west-1")]
         assert gateway.calls == 2  # the list refreshed after emptying
 
 
@@ -394,3 +394,20 @@ async def test_filter_fetches_remaining_pages_to_find_matches_beyond_the_first_p
         assert gateway.next_tokens == [None, "t1"]
         assert table.row_count == 1
         assert table.get_row_at(0)[0] == "prod-assets"
+
+
+@pytest.mark.asyncio
+async def test_emptying_passes_the_buckets_own_region() -> None:
+    gateway = FakeS3Gateway(buckets=[make_bucket("assets", region="us-east-2")], empty_batches=[1])
+    app = BucketScreenApp(gateway)
+
+    async with app.run_test() as pilot:
+        await _settle(app)
+        await pilot.pause()
+
+        await pilot.press("e")
+        await pilot.pause()
+        await pilot.press("y")
+        await _until_back_on_list(app, pilot)
+
+        assert gateway.emptied == [("assets", "us-east-2")]

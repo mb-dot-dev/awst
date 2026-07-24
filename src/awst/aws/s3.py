@@ -105,7 +105,7 @@ class S3Gateway:
         """
         return self._delete_versions(bucket, region, prefix, lambda _: True)
 
-    def empty_bucket(self: Self, name: str) -> Iterator[int]:
+    def empty_bucket(self: Self, name: str, region: str) -> Iterator[int]:
         """Delete every object version and delete marker in the bucket.
 
         Yields the cumulative deleted-object count after each batch of up to
@@ -113,7 +113,7 @@ class S3Gateway:
         any credential, network, or API failure, including per-key failures
         reported by DeleteObjects.
         """
-        return self._delete_versions(name, "", "", lambda _: True)
+        return self._delete_versions(name, region, "", lambda _: True)
 
     def _delete_versions(
         self: Self,

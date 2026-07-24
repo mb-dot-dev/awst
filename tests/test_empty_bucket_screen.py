@@ -38,7 +38,7 @@ class EmptyBucketApp(App[None]):
         self.results: list[None] = []
 
     def on_mount(self: Self) -> None:
-        self.push_screen(EmptyBucketScreen(self.gateway, "assets"), self.results.append)
+        self.push_screen(EmptyBucketScreen(self.gateway, "assets", "eu-west-1"), self.results.append)
 
 
 async def _until_dismissed(app: EmptyBucketApp, pilot: Pilot[None]) -> None:
@@ -68,7 +68,7 @@ async def test_success_empties_bucket_and_toasts_final_count(toasts: list[str]) 
     async with app.run_test() as pilot:
         await _until_dismissed(app, pilot)
 
-    assert gateway.emptied == ["assets"]
+    assert gateway.emptied == [("assets", "eu-west-1")]
     assert toasts == ["1,234 objects deleted."]
 
 

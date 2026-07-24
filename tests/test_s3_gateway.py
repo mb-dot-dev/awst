@@ -283,3 +283,90 @@ def test_list_objects_uses_base_client_for_home_and_unknown_regions() -> None:
 
     assert [obj.key for obj in gateway.list_objects("alpha", "eu-west-1").objects] == ["a.txt"]
     assert [obj.key for obj in gateway.list_objects("alpha", "").objects] == ["a.txt"]
+
+
+@mock_aws
+def test_delete_object_removes_every_version_and_marker_of_the_exact_key() -> None:
+    _create_bucket("alpha")
+    client = boto3.client("s3", region_name="eu-west-1")
+    client.put_bucket_versioning(Bucket="alpha", VersioningConfiguration={"Status": "Enabled"})
+    client.put_object(Bucket="alpha", Key="file.txt", Body=b"v1")
+    client.put_object(Bucket="alpha", Key="file.txt", Body=b"v2")
+    client.delete_object(Bucket="alpha", Key="file.txt")  # adds a delete marker
+    client.put_object(Bucket="alpha", Key="file.txt.bak", Body=b"keep me")
+
+    counts = list(_gateway().delete_object("alpha", "eu-west-1", "file.txt"))
+
+    assert counts == [3]  # two versions + one delete marker
+    # the sibling key that merely starts with "file.txt" survives
+    assert [obj["Key"] for obj in client.list_objects_v2(Bucket="alpha")["Contents"]] == ["file.txt.bak"]
+
+
+@mock_aws
+def test_delete_object_on_a_missing_key_yields_nothing() -> None:
+    _create_bucket("alpha")
+
+    assert list(_gateway().delete_object("alpha", "eu-west-1", "gone.txt")) == []
+
+
+@mock_aws
+def test_delete_prefix_removes_everything_beneath_it_and_nothing_else() -> None:
+    _create_bucket("alpha")
+    client = boto3.client("s3", region_name="eu-west-1")
+    for key in ("docs/guide.md", "docs/2026/notes.md", "docs.txt", "readme.md"):
+        client.put_object(Bucket="alpha", Key=key, Body=b"hi")
+
+    counts = list(_gateway().delete_prefix("alpha", "eu-west-1", "docs/"))
+
+    assert counts == [2]
+    remaining = [obj["Key"] for obj in client.list_objects_v2(Bucket="alpha")["Contents"]]
+    assert remaining == ["docs.txt", "readme.md"]
+
+
+@mock_aws
+def test_delete_prefix_on_an_empty_prefix_yields_nothing() -> None:
+    _create_bucket("alpha")
+    boto3.client("s3", region_name="eu-west-1").put_object(Bucket="alpha", Key="readme.md", Body=b"hi")
+
+    assert list(_gateway().delete_prefix("alpha", "eu-west-1", "nothing/")) == []
+
+
+@mock_aws
+def test_delete_prefix_deletes_in_batches_of_1000() -> None:
+    _create_bucket("alpha")
+    client = boto3.client("s3", region_name="eu-west-1")
+    for index in range(1050):
+        client.put_object(Bucket="alpha", Key=f"logs/key-{index:04}", Body=b"")
+
+    counts = list(_gateway().delete_prefix("alpha", "eu-west-1", "logs/"))
+
+    assert counts == [1000, 1050]
+    assert client.list_objects_v2(Bucket="alpha")["KeyCount"] == 0
+
+
+@mock_aws
+def test_delete_prefix_maps_missing_bucket_to_aws_error() -> None:
+    deletions = _gateway().delete_prefix("missing", "eu-west-1", "docs/")  # lazy: nothing raises until iterated
+
+    with pytest.raises(AwsError):
+        list(deletions)
+
+
+@mock_aws
+def test_delete_object_uses_the_regional_client_for_other_regions() -> None:
+    regions_built: list[str] = []
+
+    def factory(region: str):  # noqa: ANN202 -- returns a boto3 S3 client
+        regions_built.append(region)
+        return boto3.client("s3", region_name=region)
+
+    gateway = S3Gateway(boto3.client("s3", region_name="eu-west-1"), regional_client_factory=factory)
+    remote = boto3.client("s3", region_name="us-east-2")
+    remote.create_bucket(Bucket="remote", CreateBucketConfiguration={"LocationConstraint": "us-east-2"})
+    remote.put_object(Bucket="remote", Key="a.txt", Body=b"hi")
+
+    counts = list(gateway.delete_object("remote", "us-east-2", "a.txt"))
+
+    assert regions_built == ["us-east-2"]
+    assert counts == [1]
+    assert "Contents" not in remote.list_objects_v2(Bucket="remote")

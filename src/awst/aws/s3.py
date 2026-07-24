@@ -84,6 +84,27 @@ class S3Gateway:
             self._regional_clients[region] = self._regional_client_factory(region)
         return self._regional_clients[region]
 
+    def delete_object(self: Self, bucket: str, region: str, key: str) -> Iterator[int]:
+        """Delete every version and delete marker of one object key.
+
+        Yields the cumulative deleted count after each batch of up to 1000
+        keys; a key that does not exist yields nothing. Raises AwsError for any
+        credential, network, or API failure.
+        """
+        # Prefix=key also returns keys that merely extend it ("file.txt.bak"), so match exactly.
+        # S3 returns keys in lexicographic order and key sorts before anything extending it,
+        # so a page holding no exact match means this key's versions are exhausted.
+        return self._delete_versions(bucket, region, key, lambda candidate: candidate == key)
+
+    def delete_prefix(self: Self, bucket: str, region: str, prefix: str) -> Iterator[int]:
+        """Delete every version and delete marker of every key beneath the prefix.
+
+        Yields the cumulative deleted count after each batch of up to 1000
+        keys; a prefix holding no keys yields nothing. Raises AwsError for any
+        credential, network, or API failure.
+        """
+        return self._delete_versions(bucket, region, prefix, lambda _: True)
+
     def empty_bucket(self: Self, name: str) -> Iterator[int]:
         """Delete every object version and delete marker in the bucket.
 
@@ -92,22 +113,33 @@ class S3Gateway:
         any credential, network, or API failure, including per-key failures
         reported by DeleteObjects.
         """
+        return self._delete_versions(name, "", "", lambda _: True)
+
+    def _delete_versions(
+        self: Self,
+        bucket: str,
+        region: str,
+        prefix: str,
+        match: Callable[[str], bool],
+    ) -> Iterator[int]:
+        """Delete every version and delete marker under prefix whose key satisfies match."""
+        client = self._client_for(region)
         deleted = 0
         try:
             # Re-list from the start after each batch instead of paginating with
             # markers: resuming from a just-deleted key breaks under moto, and
             # restarting is the standard pattern for delete-while-listing anyway.
-            # Each round deletes everything it listed (or raises), so the loop
+            # Each round deletes everything it matched (or raises), so the loop
             # always makes progress.
             while True:
-                page = self._client.list_object_versions(Bucket=name, MaxKeys=1000)
+                page = client.list_object_versions(Bucket=bucket, Prefix=prefix, MaxKeys=1000)
                 items = [*page.get("Versions", []), *page.get("DeleteMarkers", [])]
-                if not items:
-                    break
                 keys: list[ObjectIdentifierTypeDef] = [
-                    {"Key": item["Key"], "VersionId": item["VersionId"]} for item in items
+                    {"Key": item["Key"], "VersionId": item["VersionId"]} for item in items if match(item["Key"])
                 ]
-                self._delete_batch(name, keys)
+                if not keys:
+                    break
+                self._delete_batch(bucket, keys)
                 deleted += len(keys)
                 yield deleted
         except (BotoCoreError, ClientError) as error:

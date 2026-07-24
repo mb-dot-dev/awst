@@ -9,7 +9,7 @@ from textual.worker import get_current_worker
 
 from awst.aws.models import ObjectSummary
 from awst.screens.confirm import ConfirmScreen
-from awst.screens.delete_objects import DeleteObjectsScreen, ObjectDeleter
+from awst.screens.delete_objects import DeleteGateway, DeleteObjectsScreen
 from awst.screens.formatting import human_size, relative_age
 from awst.screens.resource_list import ResourceListScreen
 
@@ -33,8 +33,8 @@ class ObjectLister(Protocol):
     ) -> ObjectPage: ...
 
 
-class ObjectBrowserGateway(ObjectLister, ObjectDeleter, Protocol):
-    """Everything the object browser needs from S3; note it never empties a whole bucket."""
+class ObjectBrowserGateway(ObjectLister, DeleteGateway, Protocol):
+    """Everything the object browser needs, plus what it hands to the shared delete modal."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,14 +117,7 @@ class ObjectListScreen(ResourceListScreen[ObjectEntry]):
     def _on_delete_confirmed(self: Self, target: str, confirmed: bool | None) -> None:  # noqa: FBT001
         if not confirmed:
             return
-        # ObjectBrowserGateway omits empty_bucket on purpose (this screen never passes target=""), so
-        # it's not statically a DeleteGateway even though every real implementation has it too.
-        screen = DeleteObjectsScreen(
-            self._gateway,  # ty: ignore[invalid-argument-type]
-            self._bucket,
-            self._region,
-            target,
-        )
+        screen = DeleteObjectsScreen(self._gateway, self._bucket, self._region, target)
         self.app.push_screen(screen, self._on_delete_finished)
 
     def _on_delete_finished(self: Self, result: None) -> None:  # noqa: ARG002

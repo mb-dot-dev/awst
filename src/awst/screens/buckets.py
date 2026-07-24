@@ -8,7 +8,7 @@ from textual.worker import get_current_worker
 
 from awst.aws.models import BucketSummary, Page
 from awst.screens.confirm import ConfirmScreen
-from awst.screens.empty_bucket import BucketEmptier, EmptyBucketScreen
+from awst.screens.delete_objects import BucketEmptier, DeleteObjectsScreen, ObjectDeleter
 from awst.screens.formatting import relative_age
 from awst.screens.objects import ObjectLister, ObjectListScreen
 from awst.screens.resource_list import ResourceListScreen
@@ -26,7 +26,7 @@ class BucketLister(Protocol):
     def list_buckets(self: Self, next_token: str | None = None) -> Page[BucketSummary]: ...
 
 
-class BucketGateway(BucketLister, BucketEmptier, ObjectLister, Protocol):
+class BucketGateway(BucketLister, BucketEmptier, ObjectDeleter, ObjectLister, Protocol):
     """Everything the bucket screens collectively need from S3."""
 
 
@@ -85,7 +85,7 @@ class BucketListScreen(ResourceListScreen[BucketSummary]):
     def _on_empty_confirmed(self: Self, bucket: BucketSummary, confirmed: bool | None) -> None:  # noqa: FBT001
         if not confirmed:
             return
-        screen = EmptyBucketScreen(self._gateway, bucket.name, bucket.region)
+        screen = DeleteObjectsScreen(self._gateway, bucket.name, bucket.region, "")
         self.app.push_screen(screen, self._on_empty_finished)
 
     def _on_empty_finished(self: Self, result: None) -> None:  # noqa: ARG002

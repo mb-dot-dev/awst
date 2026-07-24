@@ -1,4 +1,4 @@
-"""Modal that empties one S3 bucket, showing live progress with cancel."""
+"""Modal that deletes S3 objects — one key, one prefix, or a whole bucket — with live progress."""
 
 from typing import TYPE_CHECKING, ClassVar, Protocol, Self
 
@@ -18,18 +18,35 @@ if TYPE_CHECKING:
 
 
 class BucketEmptier(Protocol):
-    """The slice of the S3 gateway this screen needs."""
+    """The slice of the S3 gateway used to empty a whole bucket."""
 
     def empty_bucket(self: Self, name: str, region: str) -> Iterator[int]: ...
 
 
-class EmptyBucketScreen(ModalScreen[None]):
-    """Delete every object version in one bucket; dismisses once done, cancelled, or failed."""
+class ObjectDeleter(Protocol):
+    """The slice of the S3 gateway used to delete one object or one prefix."""
+
+    def delete_object(self: Self, bucket: str, region: str, key: str) -> Iterator[int]: ...
+
+    def delete_prefix(self: Self, bucket: str, region: str, prefix: str) -> Iterator[int]: ...
+
+
+class DeleteGateway(BucketEmptier, ObjectDeleter, Protocol):
+    """Everything the progress modal may call."""
+
+
+class DeleteObjectsScreen(ModalScreen[None]):
+    """Delete S3 objects with live progress; dismisses once done, cancelled, or failed.
+
+    `target` selects what to delete: "" is the whole bucket, a value ending "/"
+    is every key beneath that prefix, and anything else is a single object key.
+    Every version and delete marker goes in all three cases.
+    """
 
     BINDINGS: ClassVar[list[BindingType]] = [("escape", "cancel", "Cancel")]
 
     DEFAULT_CSS = """
-    EmptyBucketScreen { align: center middle; }
+    DeleteObjectsScreen { align: center middle; }
     #dialog {
         width: auto;
         max-width: 80;
@@ -43,26 +60,41 @@ class EmptyBucketScreen(ModalScreen[None]):
     #progress { color: $text-muted; margin-top: 1; }
     """
 
-    def __init__(self: Self, gateway: BucketEmptier, bucket_name: str, region: str) -> None:
+    def __init__(self: Self, gateway: DeleteGateway, bucket: str, region: str, target: str = "") -> None:
         super().__init__()
         self._gateway = gateway
-        self._bucket_name = bucket_name
+        self._bucket = bucket
         self._region = region
+        self._target = target
         self._deleted = 0
 
     def compose(self: Self) -> ComposeResult:
         with Vertical(id="dialog"):
-            yield Static(f"Emptying {self._bucket_name}", id="title")
+            yield Static(self._title(), id="title")
             yield Static("Deleting… 0 objects deleted", id="progress")
         yield Footer()
 
+    def _title(self: Self) -> str:
+        return f"Deleting {self._target}" if self._target else f"Emptying {self._bucket}"
+
+    def _done_title(self: Self) -> str:
+        return f"Deleted {self._target}" if self._target else f"Emptied {self._bucket}"
+
+    def _deletions(self: Self) -> Iterator[int]:
+        """The gateway call for this target; the delimiter tells a folder from an object key."""
+        if not self._target:
+            return self._gateway.empty_bucket(self._bucket, self._region)
+        if self._target.endswith("/"):
+            return self._gateway.delete_prefix(self._bucket, self._region, self._target)
+        return self._gateway.delete_object(self._bucket, self._region, self._target)
+
     def on_mount(self: Self) -> None:
-        self._empty()
+        self._delete()
 
     @work(thread=True, exclusive=True, exit_on_error=False)
-    def _empty(self: Self) -> None:
+    def _delete(self: Self) -> None:
         worker = get_current_worker()
-        for count in self._gateway.empty_bucket(self._bucket_name, self._region):
+        for count in self._deletions():
             if worker.is_cancelled:
                 return
             self.app.call_from_thread(self._update_progress, count)
@@ -78,10 +110,10 @@ class EmptyBucketScreen(ModalScreen[None]):
         return f"{self._deleted:,} {noun}"
 
     def on_worker_state_changed(self: Self, event: Worker.StateChanged) -> None:
-        if event.worker.name != "_empty":
+        if event.worker.name != "_delete":
             return
         if event.state == WorkerState.SUCCESS:
-            self.notify(f"{self._count_text()} deleted.", title=f"Emptied {self._bucket_name}")
+            self.notify(f"{self._count_text()} deleted.", title=self._done_title())
             self.dismiss(result=None)
         elif event.state == WorkerState.CANCELLED:
             self.notify(f"At least {self._count_text()} already deleted.", title="Cancelled", severity="warning")
@@ -90,10 +122,11 @@ class EmptyBucketScreen(ModalScreen[None]):
             error = event.worker.error
             if isinstance(error, AwsError):
                 message = error.message if error.hint is None else f"{error.message} ({error.hint})"
-                self.notify(message, title="Empty bucket failed", severity="error")
+                self.notify(message, title="Delete failed", severity="error")
                 self.dismiss(result=None)
             elif error is not None:
                 raise error
 
     def action_cancel(self: Self) -> None:
+        """Cancel the in-flight delete worker; the escape binding above triggers this."""
         self.workers.cancel_node(self)

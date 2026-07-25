@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 import pytest
-from textual.widgets import OptionList
+from textual.widgets import Input, OptionList, Static
 
 from awst.app import AwstApp
 from awst.screens.home import HomeScreen
@@ -79,13 +79,77 @@ async def test_picker_skipped_when_no_profiles_exist() -> None:
 
 
 @pytest.mark.asyncio
-async def test_q_quits_from_picker() -> None:
+async def test_typing_narrows_the_profiles() -> None:
     _write_config()
     app = AwstApp(cloudformation_gateway=FakeCloudFormationGateway())
 
     async with app.run_test() as pilot:
         await pilot.pause()
-        await pilot.press("q")
+        await pilot.press("p", "r", "o")
+        await pilot.pause()
+
+        options = app.screen.query_one(OptionList)
+        assert options.option_count == 1
+        assert options.get_option_at_index(0).id == "prod"
+        assert str(app.screen.query_one("#prompt", Static).content) == "1 of 2 profiles"
+
+
+@pytest.mark.asyncio
+async def test_enter_selects_the_filtered_profile() -> None:
+    _write_config()
+    app = AwstApp(cloudformation_gateway=FakeCloudFormationGateway())
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("p", "r", "o")
+        await pilot.press("enter")
+        await pilot.pause()
+
+        assert os.environ["AWS_PROFILE"] == "prod"
+        assert isinstance(app.screen, HomeScreen)
+
+
+@pytest.mark.asyncio
+async def test_escape_clears_the_filter() -> None:
+    _write_config()
+    app = AwstApp(cloudformation_gateway=FakeCloudFormationGateway())
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("p", "r", "o")
+        await pilot.press("escape")
+        await pilot.pause()
+
+        assert isinstance(app.screen, ProfileSelectScreen)
+        assert app.screen.query_one("#filter", Input).value == ""
+        assert app.screen.query_one(OptionList).option_count == 2
+        assert str(app.screen.query_one("#prompt", Static).content) == "Select an AWS profile"
+
+
+@pytest.mark.asyncio
+async def test_no_matches_reports_it_and_enter_does_nothing() -> None:
+    _write_config()
+    app = AwstApp(cloudformation_gateway=FakeCloudFormationGateway())
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("z", "z", "z")
+        await pilot.press("enter")
+        await pilot.pause()
+
+        assert isinstance(app.screen, ProfileSelectScreen)
+        assert app.screen.query_one(OptionList).option_count == 0
+        assert str(app.screen.query_one("#prompt", Static).content) == "no profiles match"
+
+
+@pytest.mark.asyncio
+async def test_ctrl_q_quits_from_picker() -> None:
+    _write_config()
+    app = AwstApp(cloudformation_gateway=FakeCloudFormationGateway())
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("ctrl+q")
         await pilot.pause()
 
     assert app.return_code == 0

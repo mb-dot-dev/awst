@@ -9,6 +9,7 @@ _MINUTE = 60
 _HOUR = 3600
 _DAY = 86400
 _KIB = 1024
+_MASK = "•" * 8
 
 
 def relative_age(moment: datetime, now: datetime) -> str:
@@ -21,6 +22,16 @@ def relative_age(moment: datetime, now: datetime) -> str:
     if seconds < _DAY:
         return f"{seconds // _HOUR}h ago"
     return f"{seconds // _DAY}d ago"
+
+
+def mask_value(value: str, param_type: str, *, revealed: bool) -> str:
+    """Hide a SecureString value behind a fixed-width mask unless it has been revealed.
+
+    The mask's width is constant so it does not leak the secret's length.
+    """
+    if param_type == "SecureString" and not revealed:
+        return _MASK
+    return value
 
 
 def status_style(status: str) -> str:

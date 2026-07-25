@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from awst.screens.formatting import human_size, relative_age, status_style
+from awst.screens.formatting import human_size, mask_value, relative_age, status_style
 
 NOW = datetime(2026, 7, 4, 12, 0, tzinfo=UTC)
 
@@ -57,3 +57,23 @@ def test_status_style(status: str, expected: str) -> None:
 )
 def test_human_size(size: int, expected: str) -> None:
     assert human_size(size) == expected
+
+
+def test_mask_value_hides_a_secure_string_when_not_revealed() -> None:
+    assert mask_value("s3cret", "SecureString", revealed=False) == "••••••••"
+
+
+def test_mask_value_shows_a_secure_string_when_revealed() -> None:
+    assert mask_value("s3cret", "SecureString", revealed=True) == "s3cret"
+
+
+def test_mask_value_never_masks_plain_types() -> None:
+    assert mask_value("postgres://db", "String", revealed=False) == "postgres://db"
+    assert mask_value("a,b,c", "StringList", revealed=False) == "a,b,c"
+
+
+def test_mask_value_mask_width_does_not_depend_on_value_length() -> None:
+    short = mask_value("x", "SecureString", revealed=False)
+    long = mask_value("x" * 200, "SecureString", revealed=False)
+
+    assert short == long

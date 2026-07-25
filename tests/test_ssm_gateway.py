@@ -75,8 +75,8 @@ def test_list_parameters_forwards_next_token() -> None:
     }
     client = boto3.client("ssm", region_name="eu-west-1")
     with Stubber(client) as stubber:
-        stubber.add_response("describe_parameters", first_page, {})
-        stubber.add_response("describe_parameters", second_page, {"NextToken": "t1"})
+        stubber.add_response("describe_parameters", first_page, {"MaxResults": 50})
+        stubber.add_response("describe_parameters", second_page, {"NextToken": "t1", "MaxResults": 50})
 
         first = SsmGateway(client).list_parameters()
         second = SsmGateway(client).list_parameters(first.next_token)

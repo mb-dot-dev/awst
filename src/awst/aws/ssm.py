@@ -25,10 +25,12 @@ class SsmGateway:
         Raises AwsError for any credential, network, or API failure.
         """
         try:
+            # The API defaults MaxResults to 10 and caps it at 50; request the cap explicitly so
+            # each page (and each page-fetching API call) covers as many parameters as possible.
             if next_token is None:
-                response = self._client.describe_parameters()
+                response = self._client.describe_parameters(MaxResults=50)
             else:
-                response = self._client.describe_parameters(NextToken=next_token)
+                response = self._client.describe_parameters(NextToken=next_token, MaxResults=50)
         except (BotoCoreError, ClientError) as error:
             raise map_botocore_error(error) from error
         parameters = tuple(_to_summary(parameter) for parameter in response.get("Parameters", []))

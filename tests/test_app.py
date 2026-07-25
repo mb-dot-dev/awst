@@ -283,10 +283,14 @@ async def test_region_picker_is_unavailable_on_the_startup_profile_picker() -> N
         assert isinstance(app.screen, ProfileSelectScreen)
 
 
-def test_reset_gateways_rebuilds_on_next_access() -> None:
+@pytest.mark.parametrize(
+    "gateway_attr",
+    ["cloudformation_gateway", "s3_gateway", "lambda_gateway", "sqs_gateway", "ssm_gateway"],
+)
+def test_reset_gateways_rebuilds_on_next_access(gateway_attr: str) -> None:
     app = AwstApp()
 
-    first = app.s3_gateway
+    first = getattr(app, gateway_attr)
     app.reset_gateways()
 
-    assert app.s3_gateway is not first
+    assert getattr(app, gateway_attr) is not first

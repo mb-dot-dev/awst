@@ -14,7 +14,10 @@ class RegionSelectScreen(FilterableSelectScreen[str | None]):
     PROMPT = "Select an AWS region"
     NOUN = "region"
 
-    BINDINGS: ClassVar[list[BindingType]] = [("escape", "clear_or_cancel", "Back")]
+    BINDINGS: ClassVar[list[BindingType]] = [
+        ("escape", "clear_filter", "Clear"),
+        ("escape", "cancel", "Back"),
+    ]
 
     def __init__(self: Self, region_names: list[str], current: str | None) -> None:
         super().__init__(region_names)
@@ -23,5 +26,5 @@ class RegionSelectScreen(FilterableSelectScreen[str | None]):
     def _selected(self: Self, name: str) -> None:
         self.dismiss(name)
 
-    def _cancel(self: Self) -> None:
+    def action_cancel(self: Self) -> None:
         self.dismiss(None)

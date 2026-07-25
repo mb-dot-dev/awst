@@ -45,9 +45,6 @@ class FilterableSelectScreen[ResultT](Screen[ResultT]):
         """Dismiss with the chosen name; subclasses type the result."""
         raise NotImplementedError
 
-    def _cancel(self: Self) -> None:
-        """Escape with an empty filter; a no-op unless the subclass can cancel."""
-
     def compose(self: Self) -> ComposeResult:
         yield Static(self.PROMPT, id="prompt")
         yield Input(placeholder=f"filter {self.NOUN}s by name", id="filter")
@@ -87,6 +84,7 @@ class FilterableSelectScreen[ResultT](Screen[ResultT]):
     def on_input_changed(self: Self, event: Input.Changed) -> None:
         if event.input.id == "filter":
             self._render_options()
+            self.refresh_bindings()  # escape swaps between clear_filter and cancel
 
     def on_input_submitted(self: Self, event: Input.Submitted) -> None:
         if event.input.id == "filter":
@@ -103,9 +101,16 @@ class FilterableSelectScreen[ResultT](Screen[ResultT]):
     def action_cursor_down(self: Self) -> None:
         self.query_one("#options", OptionList).action_cursor_down()
 
-    def action_clear_or_cancel(self: Self) -> None:
-        filter_input = self.query_one("#filter", Input)
-        if filter_input.value:
-            filter_input.value = ""  # fires Input.Changed, which re-renders the options
-        else:
-            self._cancel()
+    def check_action(self: Self, action: str, parameters: tuple[object, ...]) -> bool | None:  # noqa: ARG002
+        """Escape means "clear" only while filtering, and "cancel" only when not.
+
+        Subclasses bind escape to one or both; the footer then labels whichever
+        one applies right now, instead of one label that is half wrong.
+        """
+        if action in {"clear_filter", "cancel"}:
+            filtering = bool(self.query_one("#filter", Input).value)
+            return filtering if action == "clear_filter" else not filtering
+        return True
+
+    def action_clear_filter(self: Self) -> None:
+        self.query_one("#filter", Input).value = ""  # fires Input.Changed, which re-renders the options

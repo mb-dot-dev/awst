@@ -81,6 +81,20 @@ async def test_escape_dismisses_with_none() -> None:
 
 
 @pytest.mark.asyncio
+async def test_escape_is_labelled_for_what_it_does() -> None:
+    app = RegionApp()
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert app.screen.active_bindings["escape"].binding.description == "Back"
+
+        await pilot.press("u", "s")
+        await pilot.pause()
+
+        assert app.screen.active_bindings["escape"].binding.description == "Clear"
+
+
+@pytest.mark.asyncio
 async def test_typing_narrows_the_regions() -> None:
     app = RegionApp()
 

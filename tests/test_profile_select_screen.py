@@ -127,6 +127,21 @@ async def test_escape_clears_the_filter() -> None:
 
 
 @pytest.mark.asyncio
+async def test_escape_is_only_offered_while_filtering() -> None:
+    _write_config()
+    app = AwstApp(cloudformation_gateway=FakeCloudFormationGateway())
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert "escape" not in app.screen.active_bindings  # nothing to clear, and nowhere to go back to
+
+        await pilot.press("p", "r", "o")
+        await pilot.pause()
+
+        assert app.screen.active_bindings["escape"].binding.description == "Clear"
+
+
+@pytest.mark.asyncio
 async def test_no_matches_reports_it_and_enter_does_nothing() -> None:
     _write_config()
     app = AwstApp(cloudformation_gateway=FakeCloudFormationGateway())

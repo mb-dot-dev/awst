@@ -15,7 +15,7 @@ class ProfileSelectScreen(FilterableSelectScreen[str]):
     NOUN = "profile"
 
     BINDINGS: ClassVar[list[BindingType]] = [
-        ("escape", "clear_or_cancel", "Clear"),
+        ("escape", "clear_filter", "Clear"),
         ("ctrl+q", "app.quit", "Quit"),
     ]
 

@@ -11,6 +11,7 @@ from awst.aws import regions
 from awst.screens.buckets import BucketListScreen
 from awst.screens.functions import FunctionListScreen
 from awst.screens.home import HomeScreen
+from awst.screens.parameters import ParameterListScreen
 from awst.screens.profiles import ProfileSelectScreen
 from awst.screens.queues import QueueListScreen
 from awst.screens.regions import RegionSelectScreen
@@ -21,9 +22,11 @@ from tests.fakes import (
     FakeLambdaGateway,
     FakeS3Gateway,
     FakeSqsGateway,
+    FakeSsmGateway,
     make_bucket,
     make_detail,
     make_function,
+    make_parameter,
     make_queue,
     make_stack,
 )
@@ -38,15 +41,16 @@ async def test_home_screen_lists_all_services_enabled() -> None:
         options = app.screen.query_one(OptionList)
 
         assert isinstance(app.screen, HomeScreen)
-        assert options.option_count == 4
+        assert options.option_count == 5
         assert options.get_option("cloudformation").disabled is False
         assert options.get_option("s3").disabled is False
         assert options.get_option("lambda").disabled is False
         assert options.get_option("sqs").disabled is False
+        assert options.get_option("ssm").disabled is False
 
 
 @pytest.mark.asyncio
-async def test_navigation_reaches_sqs_and_wraps() -> None:
+async def test_navigation_reaches_ssm_and_wraps() -> None:
     app = AwstApp(cloudformation_gateway=FakeCloudFormationGateway())
 
     async with app.run_test() as pilot:
@@ -57,8 +61,9 @@ async def test_navigation_reaches_sqs_and_wraps() -> None:
         await pilot.press("down")
         await pilot.press("down")
         await pilot.press("down")
+        await pilot.press("down")
         await pilot.pause()
-        assert options.highlighted == 3  # sqs, now enabled
+        assert options.highlighted == 4  # ssm, the last entry
 
         await pilot.press("down")
         await pilot.pause()
@@ -139,6 +144,27 @@ async def test_selecting_sqs_opens_queue_list() -> None:
         await pilot.pause()
 
         assert isinstance(app.screen, QueueListScreen)
+        assert app.screen.query_one(DataTable).row_count == 1
+
+
+@pytest.mark.asyncio
+async def test_selecting_ssm_opens_parameter_list() -> None:
+    app = AwstApp(
+        cloudformation_gateway=FakeCloudFormationGateway(),
+        ssm_gateway=FakeSsmGateway(parameters=[make_parameter("/app/prod/db-url")]),
+    )
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("down")  # s3
+        await pilot.press("down")  # lambda
+        await pilot.press("down")  # sqs
+        await pilot.press("down")  # ssm
+        await pilot.press("enter")
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+
+        assert isinstance(app.screen, ParameterListScreen)
         assert app.screen.query_one(DataTable).row_count == 1
 
 

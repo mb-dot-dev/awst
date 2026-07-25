@@ -10,6 +10,7 @@ from awst.aws.cloudformation import CloudFormationGateway
 from awst.aws.lambda_ import LambdaGateway
 from awst.aws.s3 import S3Gateway
 from awst.aws.sqs import SqsGateway
+from awst.aws.ssm import SsmGateway
 from awst.aws.sso import SsoLoginGateway
 from awst.screens.home import HomeScreen
 from awst.screens.profiles import ProfileSelectScreen
@@ -24,6 +25,7 @@ if TYPE_CHECKING:
     from awst.aws.models import SsoConfig
     from awst.screens.buckets import BucketGateway
     from awst.screens.functions import FunctionLister
+    from awst.screens.parameters import ParameterLister
     from awst.screens.queues import QueueLister
     from awst.screens.sso_login import SsoAuthorizer
     from awst.screens.stacks import StackGateway
@@ -34,12 +36,13 @@ class AwstApp(App[None]):
 
     BINDINGS: ClassVar[list[BindingType]] = [("ctrl+g", "switch_region", "Region")]
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self: Self,
         cloudformation_gateway: StackGateway | None = None,
         s3_gateway: BucketGateway | None = None,
         lambda_gateway: FunctionLister | None = None,
         sqs_gateway: QueueLister | None = None,
+        ssm_gateway: ParameterLister | None = None,
         sso_gateway_factory: Callable[[SsoConfig], SsoAuthorizer] | None = None,
     ) -> None:
         super().__init__()
@@ -47,6 +50,7 @@ class AwstApp(App[None]):
         self._s3_gateway = s3_gateway
         self._lambda_gateway = lambda_gateway
         self._sqs_gateway = sqs_gateway
+        self._ssm_gateway = ssm_gateway
         self._sso_gateway_factory = sso_gateway_factory
 
     @property
@@ -84,12 +88,21 @@ class AwstApp(App[None]):
             self._sqs_gateway = SqsGateway(session.client("sqs"))
         return self._sqs_gateway
 
+    @property
+    def ssm_gateway(self: Self) -> ParameterLister:
+        """The SSM gateway, built on first use from the default credential chain."""
+        if self._ssm_gateway is None:
+            session = boto3.Session()
+            self._ssm_gateway = SsmGateway(session.client("ssm"))
+        return self._ssm_gateway
+
     def reset_gateways(self: Self) -> None:
         """Drop the cached gateways so the next use rebuilds them from the current environment."""
         self._cloudformation_gateway = None
         self._s3_gateway = None
         self._lambda_gateway = None
         self._sqs_gateway = None
+        self._ssm_gateway = None
 
     @property
     def sso_login_possible(self: Self) -> bool:

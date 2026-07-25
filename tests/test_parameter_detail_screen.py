@@ -106,6 +106,31 @@ async def test_plain_string_value_is_never_masked() -> None:
 
 
 @pytest.mark.asyncio
+async def test_value_with_markup_like_syntax_renders_literally() -> None:
+    # A value that looks like Rich console markup must render as literal text, not be
+    # interpreted as styling — that's why _render_value wraps it in Text() rather than
+    # passing a bare str to Static.update(). str(widget.content) can't tell the two apart
+    # (Text.plain and a bare str compare equal), so this asserts on the rendered output,
+    # where markup parsing actually happens.
+    markup = "[bold red]x[/bold red]"
+    summary = make_parameter("/app/prod/db-url")
+    gateway = FakeSsmGateway(detail=make_parameter_detail("/app/prod/db-url", "String", markup))
+    app = DetailScreenApp(gateway, summary)
+
+    async with app.run_test() as pilot:
+        await _settle(app)
+        await pilot.pause()
+        value_widget = app.screen.query_one("#value", Static)
+        assert value_widget.region.width > 0
+        assert value_widget.region.height > 0
+
+        # export_screenshot renders spaces as "&#160;" (non-breaking space) SVG entities.
+        screenshot = app.export_screenshot().replace("&#160;", " ")
+
+        assert markup in screenshot
+
+
+@pytest.mark.asyncio
 async def test_refresh_refetches_and_remasks() -> None:
     gateway = FakeSsmGateway(detail=make_parameter_detail())
     app = DetailScreenApp(gateway)

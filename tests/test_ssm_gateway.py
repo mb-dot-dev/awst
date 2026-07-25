@@ -183,6 +183,28 @@ def test_get_parameter_maps_access_denied_to_aws_error() -> None:
     assert "kms:Decrypt" in excinfo.value.message
 
 
+def test_get_parameter_raises_aws_error_for_malformed_response() -> None:
+    # A response missing expected keys (Name here) is not expected from AWS, but if it ever
+    # happened, a bare KeyError would propagate uncaught, and _to_detail's raw dict — which
+    # holds the decrypted Value — would end up in a crash traceback. Assert it maps to an
+    # AwsError instead, and that the secret value never appears in the exception's message.
+    client = boto3.client("ssm", region_name="eu-west-1")
+    response = {
+        "Parameter": {
+            "Type": "SecureString",
+            "Value": "s3cret",
+            "Version": 3,
+        },
+    }
+    with Stubber(client) as stubber:
+        stubber.add_response("get_parameter", response, {"Name": "/app/prod/api-key", "WithDecryption": True})
+
+        with pytest.raises(AwsError) as excinfo:
+            SsmGateway(client).get_parameter("/app/prod/api-key")
+
+    assert "s3cret" not in excinfo.value.message
+
+
 def test_get_parameter_maps_parameter_not_found_to_aws_error() -> None:
     client = boto3.client("ssm", region_name="eu-west-1")
     with Stubber(client) as stubber:

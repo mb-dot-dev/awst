@@ -71,6 +71,8 @@ class ParameterDetailScreen(Screen[None]):
         return self._gateway.get_parameter(self._summary.name)
 
     def on_worker_state_changed(self: Self, event: Worker.StateChanged) -> None:
+        if event.worker.name != "_fetch_detail":
+            return
         if event.state == WorkerState.SUCCESS:
             self._loaded = True
             self.query_one("#body", VerticalScroll).loading = False
@@ -116,6 +118,7 @@ class ParameterDetailScreen(Screen[None]):
 
     def action_refresh(self: Self) -> None:
         self._revealed = False
+        self._render_value()  # mask now, not when (if) the fetch returns
         self.query_one("#error", Static).display = False
         body = self.query_one("#body", VerticalScroll)
         body.display = True
@@ -133,15 +136,22 @@ class ParameterDetailScreen(Screen[None]):
         if self._detail is None:
             return
         self.app.copy_to_clipboard(self._detail.value)
-        self.notify("Value copied to clipboard.", title=self._summary.name)
+        if self._detail.param_type == "SecureString":
+            message = "Decrypted value copied to clipboard."
+        else:
+            message = "Value copied to clipboard."
+        self.notify(message, title=self._summary.name)
 
 
-def _overview_text(detail: ParameterDetail, tier: str, now: datetime) -> str:
-    return (
-        f"Type       {detail.param_type}\n"
-        f"Tier       {tier}\n"
-        f"Version    {detail.version}\n"
-        f"Data type  {detail.data_type}\n"
-        f"Modified   {relative_age(detail.modified, now)}\n"
-        f"ARN        {detail.arn}"
-    )
+def _overview_text(detail: ParameterDetail, tier: str, now: datetime) -> Text:
+    # Text(), not a bare str: Static.update() parses a bare str as Rich console markup, and
+    # while parameter names/enums are constrained enough to be safe today, wrapping keeps
+    # that safety local rather than dependent on an AWS naming rule.
+    text = Text()
+    text.append(f"Type       {detail.param_type}\n")
+    text.append(f"Tier       {tier}\n")
+    text.append(f"Version    {detail.version}\n")
+    text.append(f"Data type  {detail.data_type}\n")
+    text.append(f"Modified   {relative_age(detail.modified, now)}\n")
+    text.append(f"ARN        {detail.arn}")
+    return text

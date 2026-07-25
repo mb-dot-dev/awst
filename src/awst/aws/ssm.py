@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Self
 from botocore.exceptions import BotoCoreError, ClientError
 
 from awst.aws.errors import map_botocore_error
-from awst.aws.models import Page, ParameterDetail, ParameterSummary
+from awst.aws.models import AwsError, Page, ParameterDetail, ParameterSummary
 
 if TYPE_CHECKING:
     from mypy_boto3_ssm import SSMClient
@@ -46,7 +46,15 @@ class SsmGateway:
             response = self._client.get_parameter(Name=name, WithDecryption=True)
         except (BotoCoreError, ClientError) as error:
             raise map_botocore_error(error) from error
-        return _to_detail(response["Parameter"])
+        try:
+            return _to_detail(response["Parameter"])
+        except KeyError as error:
+            # AWS always populates these fields in practice, but if a response ever didn't, a bare
+            # KeyError would propagate as an uncaught exception, and Textual prints fatal tracebacks
+            # with local variables — including _to_detail's raw dict, which holds the decrypted
+            # value. Map it to an AwsError so only a message (never the dict) escapes.
+            message = f"SSM returned a parameter response missing {error}."
+            raise AwsError(message) from error
 
 
 def _to_summary(parameter: ParameterMetadataTypeDef) -> ParameterSummary:

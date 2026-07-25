@@ -1,5 +1,6 @@
 """Tests for the SSM parameter detail screen."""
 
+import threading
 from typing import Self
 
 import pytest
@@ -148,6 +149,110 @@ async def test_refresh_refetches_and_remasks() -> None:
 
         assert gateway.detail_calls == ["/app/prod/api-key", "/app/prod/api-key"]
         assert _value(app) == _MASK
+
+
+@pytest.mark.asyncio
+async def test_failed_refresh_remasks_immediately_instead_of_leaving_plaintext() -> None:
+    # Regression test: action_refresh used to set _revealed = False without re-rendering,
+    # so a *failed* refresh left the plaintext value on screen (re-masking only happened on
+    # the success path, when _render_detail ran). This reveals the value, fails the refetch,
+    # and asserts the value is masked immediately rather than staying visible.
+    gateway = FakeSsmGateway(detail=make_parameter_detail())
+    app = DetailScreenApp(gateway)
+
+    async with app.run_test() as pilot:
+        await _settle(app)
+        await pilot.pause()
+        await pilot.press("s")
+        await pilot.pause()
+        assert _value(app) == "s3cret"
+
+        gateway.detail_error = AwsError("boom")
+        await pilot.press("r")
+        await _settle(app)
+        await pilot.pause()
+
+        assert _value(app) == _MASK
+
+
+@pytest.mark.asyncio
+async def test_s_before_initial_load_does_not_reveal_or_crash() -> None:
+    gate = threading.Event()
+    app = DetailScreenApp(FakeSsmGateway(detail=make_parameter_detail(), detail_gate=gate))
+
+    async with app.run_test() as pilot:
+        await pilot.press("s")
+        await pilot.pause()
+
+        assert _value(app) == ""
+
+        gate.set()
+        await _settle(app)
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_c_before_initial_load_does_not_copy_or_crash(monkeypatch: pytest.MonkeyPatch) -> None:
+    copied: list[str] = []
+
+    def record_copy(self: App[None], text: str) -> None:
+        copied.append(text)
+
+    monkeypatch.setattr(App, "copy_to_clipboard", record_copy)
+    gate = threading.Event()
+    app = DetailScreenApp(FakeSsmGateway(detail=make_parameter_detail(), detail_gate=gate))
+
+    async with app.run_test() as pilot:
+        await pilot.press("c")
+        await pilot.pause()
+
+        assert copied == []
+
+        gate.set()
+        await _settle(app)
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_copy_of_secure_string_names_it_as_decrypted(monkeypatch: pytest.MonkeyPatch) -> None:
+    toasts: list[str] = []
+
+    def record_notify(self: App[None], message: str, **kwargs: object) -> None:
+        toasts.append(message)
+
+    monkeypatch.setattr(App, "notify", record_notify)
+    app = DetailScreenApp(FakeSsmGateway(detail=make_parameter_detail(param_type="SecureString")))
+
+    async with app.run_test() as pilot:
+        await _settle(app)
+        await pilot.pause()
+
+        await pilot.press("c")
+        await pilot.pause()
+
+        assert toasts == ["Decrypted value copied to clipboard."]
+
+
+@pytest.mark.asyncio
+async def test_copy_of_plain_string_keeps_the_generic_wording(monkeypatch: pytest.MonkeyPatch) -> None:
+    toasts: list[str] = []
+
+    def record_notify(self: App[None], message: str, **kwargs: object) -> None:
+        toasts.append(message)
+
+    monkeypatch.setattr(App, "notify", record_notify)
+    summary = make_parameter("/app/prod/db-url")
+    gateway = FakeSsmGateway(detail=make_parameter_detail("/app/prod/db-url", "String", "postgres://db"))
+    app = DetailScreenApp(gateway, summary)
+
+    async with app.run_test() as pilot:
+        await _settle(app)
+        await pilot.pause()
+
+        await pilot.press("c")
+        await pilot.pause()
+
+        assert toasts == ["Value copied to clipboard."]
 
 
 @pytest.mark.asyncio

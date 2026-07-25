@@ -10,6 +10,7 @@ from awst.aws.models import (
     ObjectPage,
     ObjectSummary,
     Page,
+    ParameterSummary,
     QueueSummary,
     SsoConfig,
     SsoToken,
@@ -272,6 +273,36 @@ class FakeSqsGateway:
         if self.pages is not None:
             return self.pages.get(next_token, Page(items=(), next_token=None))
         return Page(items=tuple(self.queues), next_token=None)
+
+
+def make_parameter(name: str, param_type: str = "String", tier: str = "Standard") -> ParameterSummary:
+    """A parameter summary with sensible defaults for list-screen tests."""
+    return ParameterSummary(name=name, param_type=param_type, tier=tier, modified=_CREATED)
+
+
+class FakeSsmGateway:
+    """In-memory stand-in for the real SSM gateway."""
+
+    def __init__(
+        self: Self,
+        parameters: list[ParameterSummary] | None = None,
+        error: AwsError | None = None,
+        pages: dict[str | None, Page[ParameterSummary]] | None = None,
+    ) -> None:
+        self.parameters = parameters or []
+        self.error = error
+        self.pages = pages
+        self.calls = 0
+        self.next_tokens: list[str | None] = []
+
+    def list_parameters(self: Self, next_token: str | None = None) -> Page[ParameterSummary]:
+        self.calls += 1
+        self.next_tokens.append(next_token)
+        if self.error is not None:
+            raise self.error
+        if self.pages is not None:
+            return self.pages.get(next_token, Page(items=(), next_token=None))
+        return Page(items=tuple(self.parameters), next_token=None)
 
 
 class FakeSsoLoginGateway:

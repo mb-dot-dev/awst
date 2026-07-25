@@ -9,6 +9,7 @@ from textual.widgets.option_list import Option
 
 from awst.screens.buckets import BucketListScreen
 from awst.screens.functions import FunctionListScreen
+from awst.screens.parameters import ParameterListScreen
 from awst.screens.queues import QueueListScreen
 from awst.screens.stacks import StackListScreen
 
@@ -60,6 +61,13 @@ SERVICES = (
         resource="Queues",
         enabled=True,
         screen_factory=lambda app: QueueListScreen(app.sqs_gateway),
+    ),
+    ServiceEntry(
+        option_id="ssm",
+        name="SSM",
+        resource="Parameters",
+        enabled=True,
+        screen_factory=lambda app: ParameterListScreen(app.ssm_gateway),
     ),
 )
 

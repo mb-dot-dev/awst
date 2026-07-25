@@ -120,6 +120,16 @@ class QueueSummary:
 
 
 @dataclass(frozen=True, slots=True)
+class ParameterSummary:
+    """An SSM parameter's metadata, reduced to what the UI needs. Never holds the value."""
+
+    name: str  # the full name, including any leading path
+    param_type: str  # "String", "StringList", or "SecureString" ("type" shadows the builtin)
+    tier: str  # "Standard", "Advanced", or "Intelligent-Tiering"
+    modified: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class StackSummary:
     """A CloudFormation stack, reduced to what the UI needs."""
 

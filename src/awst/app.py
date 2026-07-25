@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from awst.aws.models import SsoConfig
     from awst.screens.buckets import BucketGateway
     from awst.screens.functions import FunctionLister
-    from awst.screens.parameters import ParameterLister
+    from awst.screens.parameters import ParameterGateway
     from awst.screens.queues import QueueLister
     from awst.screens.sso_login import SsoAuthorizer
     from awst.screens.stacks import StackGateway
@@ -42,7 +42,7 @@ class AwstApp(App[None]):
         s3_gateway: BucketGateway | None = None,
         lambda_gateway: FunctionLister | None = None,
         sqs_gateway: QueueLister | None = None,
-        ssm_gateway: ParameterLister | None = None,
+        ssm_gateway: ParameterGateway | None = None,
         sso_gateway_factory: Callable[[SsoConfig], SsoAuthorizer] | None = None,
     ) -> None:
         super().__init__()
@@ -89,7 +89,7 @@ class AwstApp(App[None]):
         return self._sqs_gateway
 
     @property
-    def ssm_gateway(self: Self) -> ParameterLister:
+    def ssm_gateway(self: Self) -> ParameterGateway:
         """The SSM gateway, built on first use from the default credential chain."""
         if self._ssm_gateway is None:
             session = boto3.Session()

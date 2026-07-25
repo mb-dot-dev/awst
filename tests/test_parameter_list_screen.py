@@ -7,6 +7,7 @@ from textual.app import App
 from textual.widgets import DataTable, Static
 
 from awst.aws.models import AwsError, Page
+from awst.screens.parameter_detail import ParameterDetailScreen
 from awst.screens.parameters import ParameterListScreen
 from tests.fakes import FakeSsmGateway, make_parameter
 
@@ -111,7 +112,7 @@ async def test_initial_load_failure_shows_error_panel() -> None:
 
 
 @pytest.mark.asyncio
-async def test_enter_on_row_does_nothing() -> None:
+async def test_enter_on_row_opens_the_detail_screen() -> None:
     gateway = FakeSsmGateway(parameters=[make_parameter("/app/prod/db-url")])
     app = ParameterScreenApp(gateway)
 
@@ -120,9 +121,11 @@ async def test_enter_on_row_does_nothing() -> None:
         await pilot.pause()
 
         await pilot.press("enter")
+        await _settle(app)
         await pilot.pause()
 
-        assert isinstance(app.screen, ParameterListScreen)  # no detail screen yet
+        assert isinstance(app.screen, ParameterDetailScreen)
+        assert gateway.detail_calls == ["/app/prod/db-url"]
 
 
 @pytest.mark.asyncio

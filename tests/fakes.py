@@ -10,6 +10,7 @@ from awst.aws.models import (
     ObjectPage,
     ObjectSummary,
     Page,
+    ParameterDetail,
     ParameterSummary,
     QueueSummary,
     SsoConfig,
@@ -280,20 +281,44 @@ def make_parameter(name: str, param_type: str = "String", tier: str = "Standard"
     return ParameterSummary(name=name, param_type=param_type, tier=tier, modified=_CREATED)
 
 
+def make_parameter_detail(
+    name: str = "/app/prod/api-key",
+    param_type: str = "SecureString",
+    value: str = "s3cret",
+) -> ParameterDetail:
+    """A parameter detail with sensible defaults for detail-screen tests."""
+    return ParameterDetail(
+        name=name,
+        param_type=param_type,
+        value=value,
+        version=3,
+        arn=f"arn:aws:ssm:eu-west-1:123456789012:parameter{name}",
+        data_type="text",
+        modified=_CREATED,
+    )
+
+
 class FakeSsmGateway:
     """In-memory stand-in for the real SSM gateway."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self: Self,
         parameters: list[ParameterSummary] | None = None,
         error: AwsError | None = None,
         pages: dict[str | None, Page[ParameterSummary]] | None = None,
+        detail: ParameterDetail | None = None,
+        detail_error: AwsError | None = None,
+        detail_gate: threading.Event | None = None,
     ) -> None:
         self.parameters = parameters or []
         self.error = error
         self.pages = pages
         self.calls = 0
         self.next_tokens: list[str | None] = []
+        self.detail = detail
+        self.detail_error = detail_error
+        self.detail_gate = detail_gate
+        self.detail_calls: list[str] = []
 
     def list_parameters(self: Self, next_token: str | None = None) -> Page[ParameterSummary]:
         self.calls += 1
@@ -303,6 +328,14 @@ class FakeSsmGateway:
         if self.pages is not None:
             return self.pages.get(next_token, Page(items=(), next_token=None))
         return Page(items=tuple(self.parameters), next_token=None)
+
+    def get_parameter(self: Self, name: str) -> ParameterDetail:
+        self.detail_calls.append(name)
+        if self.detail_gate is not None:
+            self.detail_gate.wait(timeout=5)  # lets tests freeze the worker mid-fetch
+        if self.detail_error is not None:
+            raise self.detail_error
+        return self.detail if self.detail is not None else make_parameter_detail(name)
 
 
 class FakeSsoLoginGateway:

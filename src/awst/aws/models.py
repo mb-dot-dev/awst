@@ -130,6 +130,19 @@ class ParameterSummary:
 
 
 @dataclass(frozen=True, slots=True)
+class ParameterDetail:
+    """One SSM parameter, including its value. Unlike ParameterSummary, this does hold a secret."""
+
+    name: str
+    param_type: str  # "String", "StringList", or "SecureString"
+    value: str  # decrypted for SecureString parameters
+    version: int
+    arn: str
+    data_type: str  # "text", "aws:ec2:image", ...
+    modified: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class StackSummary:
     """A CloudFormation stack, reduced to what the UI needs."""
 

@@ -2,10 +2,12 @@
 
 from typing import TYPE_CHECKING, Protocol, Self
 
+from textual.widgets import DataTable  # noqa: TC002 -- needed at runtime: Textual inspects handler annotations
 from textual.worker import get_current_worker
 
 from awst.aws.models import Page, ParameterSummary
 from awst.screens.formatting import relative_age
+from awst.screens.parameter_detail import ParameterDetailScreen, ParameterInspector
 from awst.screens.resource_list import ResourceListScreen
 
 if TYPE_CHECKING:
@@ -19,6 +21,10 @@ class ParameterLister(Protocol):
     def list_parameters(self: Self, next_token: str | None = None) -> Page[ParameterSummary]: ...
 
 
+class ParameterGateway(ParameterLister, ParameterInspector, Protocol):
+    """Everything the parameter screens collectively need from SSM."""
+
+
 class ParameterListScreen(ResourceListScreen[ParameterSummary]):
     """Read-only list of the region's SSM parameters; metadata only, never values."""
 
@@ -26,7 +32,7 @@ class ParameterListScreen(ResourceListScreen[ParameterSummary]):
     COLUMNS = ("Name", "Type", "Tier", "Modified")
     NOUN = "parameter"
 
-    def __init__(self: Self, gateway: ParameterLister) -> None:
+    def __init__(self: Self, gateway: ParameterGateway) -> None:
         super().__init__()
         self._gateway = gateway
         self._next_token: str | None = None
@@ -54,3 +60,9 @@ class ParameterListScreen(ResourceListScreen[ParameterSummary]):
 
     def _item_name(self: Self, item: ParameterSummary) -> str:
         return item.name
+
+    def on_data_table_row_selected(self: Self, event: DataTable.RowSelected) -> None:
+        name = event.row_key.value
+        summary = next((item for item in self._all_items if item.name == name), None)
+        if summary is not None:
+            self.app.push_screen(ParameterDetailScreen(self._gateway, summary))

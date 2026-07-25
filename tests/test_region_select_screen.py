@@ -4,7 +4,7 @@ from typing import Self
 
 import pytest
 from textual.app import App
-from textual.widgets import OptionList
+from textual.widgets import Input, OptionList, Static
 
 from awst.screens.regions import RegionSelectScreen
 
@@ -74,6 +74,68 @@ async def test_escape_dismisses_with_none() -> None:
 
     async with app.run_test() as pilot:
         await pilot.pause()
+        await pilot.press("escape")
+        await pilot.pause()
+
+        assert app.answers == [None]
+
+
+@pytest.mark.asyncio
+async def test_escape_is_labelled_for_what_it_does() -> None:
+    app = RegionApp()
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert app.screen.active_bindings["escape"].binding.description == "Back"
+
+        await pilot.press("u", "s")
+        await pilot.pause()
+
+        assert app.screen.active_bindings["escape"].binding.description == "Clear"
+
+
+@pytest.mark.asyncio
+async def test_typing_narrows_the_regions() -> None:
+    app = RegionApp()
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("u", "s")
+        await pilot.pause()
+
+        options = app.screen.query_one(OptionList)
+        assert options.option_count == 1
+        assert options.get_option_at_index(0).id == "us-east-1"
+        assert str(app.screen.query_one("#prompt", Static).content) == "1 of 3 regions"
+
+
+@pytest.mark.asyncio
+async def test_enter_dismisses_with_the_filtered_region() -> None:
+    app = RegionApp()
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("u", "s")
+        await pilot.press("enter")
+        await pilot.pause()
+
+        assert app.answers == ["us-east-1"]
+
+
+@pytest.mark.asyncio
+async def test_escape_clears_the_filter_before_cancelling() -> None:
+    app = RegionApp()
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("u", "s")
+        await pilot.press("escape")
+        await pilot.pause()
+
+        assert app.answers == []
+        assert app.screen.query_one("#filter", Input).value == ""
+        assert app.screen.query_one(OptionList).option_count == 3
+
         await pilot.press("escape")
         await pilot.pause()
 

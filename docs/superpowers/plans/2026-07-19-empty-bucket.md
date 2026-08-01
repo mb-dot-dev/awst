@@ -138,38 +138,39 @@ if TYPE_CHECKING:
 Add to `S3Gateway` (below `list_buckets`):
 
 ```python
-    def empty_bucket(self: Self, name: str) -> Iterator[int]:
-        """Delete every object version and delete marker in the bucket.
+def empty_bucket(self: Self, name: str) -> Iterator[int]:
+    """Delete every object version and delete marker in the bucket.
 
-        Yields the cumulative deleted-object count after each batch of up to
-        1000 keys; an already-empty bucket yields nothing. Raises AwsError for
-        any credential, network, or API failure, including per-key failures
-        reported by DeleteObjects.
-        """
-        deleted = 0
-        try:
-            paginator = self._client.get_paginator("list_object_versions")
-            for page in paginator.paginate(Bucket=name):
-                items = [*page.get("Versions", []), *page.get("DeleteMarkers", [])]
-                keys: list[ObjectIdentifierTypeDef] = [
-                    {"Key": item["Key"], "VersionId": item["VersionId"]} for item in items
-                ]
-                if not keys:
-                    continue
-                self._delete_batch(name, keys)
-                deleted += len(keys)
-                yield deleted
-        except (BotoCoreError, ClientError) as error:
-            raise map_botocore_error(error) from error
+    Yields the cumulative deleted-object count after each batch of up to
+    1000 keys; an already-empty bucket yields nothing. Raises AwsError for
+    any credential, network, or API failure, including per-key failures
+    reported by DeleteObjects.
+    """
+    deleted = 0
+    try:
+        paginator = self._client.get_paginator("list_object_versions")
+        for page in paginator.paginate(Bucket=name):
+            items = [*page.get("Versions", []), *page.get("DeleteMarkers", [])]
+            keys: list[ObjectIdentifierTypeDef] = [
+                {"Key": item["Key"], "VersionId": item["VersionId"]} for item in items
+            ]
+            if not keys:
+                continue
+            self._delete_batch(name, keys)
+            deleted += len(keys)
+            yield deleted
+    except (BotoCoreError, ClientError) as error:
+        raise map_botocore_error(error) from error
 
-    def _delete_batch(self: Self, name: str, keys: list[ObjectIdentifierTypeDef]) -> None:
-        response = self._client.delete_objects(Bucket=name, Delete={"Objects": keys, "Quiet": True})
-        errors = response.get("Errors", [])
-        if errors:
-            first = errors[0]
-            reason = first.get("Message", first.get("Code", "unknown error"))
-            message = f"Could not delete {first.get('Key', 'an object')}: {reason}"
-            raise AwsError(message)
+
+def _delete_batch(self: Self, name: str, keys: list[ObjectIdentifierTypeDef]) -> None:
+    response = self._client.delete_objects(Bucket=name, Delete={"Objects": keys, "Quiet": True})
+    errors = response.get("Errors", [])
+    if errors:
+        first = errors[0]
+        reason = first.get("Message", first.get("Code", "unknown error"))
+        message = f"Could not delete {first.get('Key', 'an object')}: {reason}"
+        raise AwsError(message)
 ```
 
 Notes for the implementer:

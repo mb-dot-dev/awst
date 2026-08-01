@@ -1092,6 +1092,7 @@ from awst.screens.functions import FunctionListScreen
 In `SERVICES`, insert between the s3 and sqs entries:
 
 ```python
+(
     ServiceEntry(
         option_id="lambda",
         name="Lambda",
@@ -1099,6 +1100,7 @@ In `SERVICES`, insert between the s3 and sqs entries:
         enabled=True,
         screen_factory=lambda app: FunctionListScreen(app.lambda_gateway),
     ),
+)
 ```
 
 - [ ] **Step 6: Run the app tests to verify they pass**

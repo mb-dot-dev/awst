@@ -36,7 +36,7 @@ class AwstApp(App[None]):
 
     BINDINGS: ClassVar[list[BindingType]] = [("ctrl+g", "switch_region", "Region")]
 
-    def __init__(  # noqa: PLR0913
+    def __init__(  # noqa: PLR0913, PLR0917
         self: Self,
         cloudformation_gateway: StackGateway | None = None,
         s3_gateway: BucketGateway | None = None,

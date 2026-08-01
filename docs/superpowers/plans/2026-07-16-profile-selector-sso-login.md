@@ -516,7 +516,9 @@ def test_start_device_authorization_registers_and_starts() -> None:
 def test_start_device_authorization_maps_failures_to_aws_error() -> None:
     client = _client()
     with Stubber(client) as stubber:
-        stubber.add_client_error("register_client", service_error_code="AccessDeniedException", service_message="denied")
+        stubber.add_client_error(
+            "register_client", service_error_code="AccessDeniedException", service_message="denied"
+        )
 
         with pytest.raises(AwsError) as excinfo:
             SsoLoginGateway(client).start_device_authorization(make_sso_config())
@@ -1023,23 +1025,24 @@ from awst.screens.profiles import ProfileSelectScreen
 Replace `on_mount` and add the callback:
 
 ```python
-    def on_mount(self: Self) -> None:
-        profile = profiles.active_profile()
-        if profile is not None:
-            self.sub_title = profile
-            self.push_screen(HomeScreen())
-            return
-        names = profiles.available_profiles()
-        if names:
-            self.push_screen(ProfileSelectScreen(names), self._on_profile_selected)
-        else:
-            self.push_screen(HomeScreen())
-
-    def _on_profile_selected(self: Self, name: str | None) -> None:
-        if name is not None:
-            profiles.select_profile(name)
-            self.sub_title = name
+def on_mount(self: Self) -> None:
+    profile = profiles.active_profile()
+    if profile is not None:
+        self.sub_title = profile
         self.push_screen(HomeScreen())
+        return
+    names = profiles.available_profiles()
+    if names:
+        self.push_screen(ProfileSelectScreen(names), self._on_profile_selected)
+    else:
+        self.push_screen(HomeScreen())
+
+
+def _on_profile_selected(self: Self, name: str | None) -> None:
+    if name is not None:
+        profiles.select_profile(name)
+        self.sub_title = name
+    self.push_screen(HomeScreen())
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**
@@ -1668,22 +1671,23 @@ Constructor — add the parameter and assignment:
 New members (below the gateway properties):
 
 ```python
-    @property
-    def sso_login_possible(self: Self) -> bool:
-        """Whether the active profile has SSO settings to log in with."""
-        return profiles.sso_config(profiles.active_profile()) is not None
+@property
+def sso_login_possible(self: Self) -> bool:
+    """Whether the active profile has SSO settings to log in with."""
+    return profiles.sso_config(profiles.active_profile()) is not None
 
-    def make_sso_login_screen(self: Self) -> SsoLoginScreen:
-        """A login modal for the active profile; only valid when sso_login_possible."""
-        config = profiles.sso_config(profiles.active_profile())
-        if config is None:
-            message = "the active profile has no SSO configuration"
-            raise RuntimeError(message)
-        if self._sso_gateway_factory is not None:
-            return SsoLoginScreen(self._sso_gateway_factory(config), config)
-        session = boto3.Session()
-        client = session.client("sso-oidc", region_name=config.sso_region)
-        return SsoLoginScreen(SsoLoginGateway(client), config)
+
+def make_sso_login_screen(self: Self) -> SsoLoginScreen:
+    """A login modal for the active profile; only valid when sso_login_possible."""
+    config = profiles.sso_config(profiles.active_profile())
+    if config is None:
+        message = "the active profile has no SSO configuration"
+        raise RuntimeError(message)
+    if self._sso_gateway_factory is not None:
+        return SsoLoginScreen(self._sso_gateway_factory(config), config)
+    session = boto3.Session()
+    client = session.client("sso-oidc", region_name=config.sso_region)
+    return SsoLoginScreen(SsoLoginGateway(client), config)
 ```
 
 - [ ] **Step 4: Extend `ResourceListScreen`**
@@ -1745,43 +1749,45 @@ Reset the flag on a successful load — the `WorkerState.SUCCESS` branch of `on_
 Set the flag and render the hint in `_show_error` (full replacement) plus a helper:
 
 ```python
-    def _show_error(self: Self, error: AwsError) -> None:
-        self._show_login = isinstance(error, CredentialsError) and bool(getattr(self.app, "sso_login_possible", False))
-        self.refresh_bindings()
-        if self._loaded:
-            message = error.message if error.hint is None else f"{error.message} ({error.hint})"
-            self.notify(message, title="Refresh failed", severity="error")
-            self._render_rows()  # restores the count text over "refreshing…"
-            return
-        table = self.query_one("#items", DataTable)
-        table.loading = False
-        table.display = False
-        self.query_one("#filter", Input).display = False
-        self.query_one("#count", Static).display = False
-        self.set_focus(None)
-        panel = self.query_one("#error", Static)
-        panel.update(self._error_text(error))
-        panel.display = True
+def _show_error(self: Self, error: AwsError) -> None:
+    self._show_login = isinstance(error, CredentialsError) and bool(getattr(self.app, "sso_login_possible", False))
+    self.refresh_bindings()
+    if self._loaded:
+        message = error.message if error.hint is None else f"{error.message} ({error.hint})"
+        self.notify(message, title="Refresh failed", severity="error")
+        self._render_rows()  # restores the count text over "refreshing…"
+        return
+    table = self.query_one("#items", DataTable)
+    table.loading = False
+    table.display = False
+    self.query_one("#filter", Input).display = False
+    self.query_one("#count", Static).display = False
+    self.set_focus(None)
+    panel = self.query_one("#error", Static)
+    panel.update(self._error_text(error))
+    panel.display = True
 
-    def _error_text(self: Self, error: AwsError) -> str:
-        text = error.message if error.hint is None else f"{error.message}\n{error.hint}"
-        if self._show_login:
-            text += "\nPress l to log in via AWS SSO."
-        return text
+
+def _error_text(self: Self, error: AwsError) -> str:
+    text = error.message if error.hint is None else f"{error.message}\n{error.hint}"
+    if self._show_login:
+        text += "\nPress l to log in via AWS SSO."
+    return text
 ```
 
 Launch the modal (new methods at the end of the class):
 
 ```python
-    def action_login(self: Self) -> None:
-        factory = getattr(self.app, "make_sso_login_screen", None)
-        if factory is None:
-            return
-        self.app.push_screen(factory(), self._on_login_finished)
+def action_login(self: Self) -> None:
+    factory = getattr(self.app, "make_sso_login_screen", None)
+    if factory is None:
+        return
+    self.app.push_screen(factory(), self._on_login_finished)
 
-    def _on_login_finished(self: Self, logged_in: bool | None) -> None:  # noqa: FBT001
-        if logged_in:
-            self.action_refresh()
+
+def _on_login_finished(self: Self, logged_in: bool | None) -> None:  # noqa: FBT001
+    if logged_in:
+        self.action_refresh()
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**

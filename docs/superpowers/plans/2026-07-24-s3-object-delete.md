@@ -166,66 +166,69 @@ Expected: 7 failures, each `AttributeError: 'S3Gateway' object has no attribute 
 In `src/awst/aws/s3.py`, replace the whole `empty_bucket` method (currently lines 87–114, ending just before `def _delete_batch`) with:
 
 ```python
-    def delete_object(self: Self, bucket: str, region: str, key: str) -> Iterator[int]:
-        """Delete every version and delete marker of one object key.
+def delete_object(self: Self, bucket: str, region: str, key: str) -> Iterator[int]:
+    """Delete every version and delete marker of one object key.
 
-        Yields the cumulative deleted count after each batch of up to 1000
-        keys; a key that does not exist yields nothing. Raises AwsError for any
-        credential, network, or API failure.
-        """
-        # Prefix=key also returns keys that merely extend it ("file.txt.bak"), so match exactly.
-        # S3 returns keys in lexicographic order and key sorts before anything extending it,
-        # so a page holding no exact match means this key's versions are exhausted.
-        return self._delete_versions(bucket, region, key, lambda candidate: candidate == key)
+    Yields the cumulative deleted count after each batch of up to 1000
+    keys; a key that does not exist yields nothing. Raises AwsError for any
+    credential, network, or API failure.
+    """
+    # Prefix=key also returns keys that merely extend it ("file.txt.bak"), so match exactly.
+    # S3 returns keys in lexicographic order and key sorts before anything extending it,
+    # so a page holding no exact match means this key's versions are exhausted.
+    return self._delete_versions(bucket, region, key, lambda candidate: candidate == key)
 
-    def delete_prefix(self: Self, bucket: str, region: str, prefix: str) -> Iterator[int]:
-        """Delete every version and delete marker of every key beneath the prefix.
 
-        Yields the cumulative deleted count after each batch of up to 1000
-        keys; a prefix holding no keys yields nothing. Raises AwsError for any
-        credential, network, or API failure.
-        """
-        return self._delete_versions(bucket, region, prefix, lambda _: True)
+def delete_prefix(self: Self, bucket: str, region: str, prefix: str) -> Iterator[int]:
+    """Delete every version and delete marker of every key beneath the prefix.
 
-    def empty_bucket(self: Self, name: str) -> Iterator[int]:
-        """Delete every object version and delete marker in the bucket.
+    Yields the cumulative deleted count after each batch of up to 1000
+    keys; a prefix holding no keys yields nothing. Raises AwsError for any
+    credential, network, or API failure.
+    """
+    return self._delete_versions(bucket, region, prefix, lambda _: True)
 
-        Yields the cumulative deleted-object count after each batch of up to
-        1000 keys; an already-empty bucket yields nothing. Raises AwsError for
-        any credential, network, or API failure, including per-key failures
-        reported by DeleteObjects.
-        """
-        return self._delete_versions(name, "", "", lambda _: True)
 
-    def _delete_versions(
-        self: Self,
-        bucket: str,
-        region: str,
-        prefix: str,
-        match: Callable[[str], bool],
-    ) -> Iterator[int]:
-        """Delete every version and delete marker under prefix whose key satisfies match."""
-        client = self._client_for(region)
-        deleted = 0
-        try:
-            # Re-list from the start after each batch instead of paginating with
-            # markers: resuming from a just-deleted key breaks under moto, and
-            # restarting is the standard pattern for delete-while-listing anyway.
-            # Each round deletes everything it matched (or raises), so the loop
-            # always makes progress.
-            while True:
-                page = client.list_object_versions(Bucket=bucket, Prefix=prefix, MaxKeys=1000)
-                items = [*page.get("Versions", []), *page.get("DeleteMarkers", [])]
-                keys: list[ObjectIdentifierTypeDef] = [
-                    {"Key": item["Key"], "VersionId": item["VersionId"]} for item in items if match(item["Key"])
-                ]
-                if not keys:
-                    break
-                self._delete_batch(client, bucket, keys)
-                deleted += len(keys)
-                yield deleted
-        except (BotoCoreError, ClientError) as error:
-            raise map_botocore_error(error) from error
+def empty_bucket(self: Self, name: str) -> Iterator[int]:
+    """Delete every object version and delete marker in the bucket.
+
+    Yields the cumulative deleted-object count after each batch of up to
+    1000 keys; an already-empty bucket yields nothing. Raises AwsError for
+    any credential, network, or API failure, including per-key failures
+    reported by DeleteObjects.
+    """
+    return self._delete_versions(name, "", "", lambda _: True)
+
+
+def _delete_versions(
+    self: Self,
+    bucket: str,
+    region: str,
+    prefix: str,
+    match: Callable[[str], bool],
+) -> Iterator[int]:
+    """Delete every version and delete marker under prefix whose key satisfies match."""
+    client = self._client_for(region)
+    deleted = 0
+    try:
+        # Re-list from the start after each batch instead of paginating with
+        # markers: resuming from a just-deleted key breaks under moto, and
+        # restarting is the standard pattern for delete-while-listing anyway.
+        # Each round deletes everything it matched (or raises), so the loop
+        # always makes progress.
+        while True:
+            page = client.list_object_versions(Bucket=bucket, Prefix=prefix, MaxKeys=1000)
+            items = [*page.get("Versions", []), *page.get("DeleteMarkers", [])]
+            keys: list[ObjectIdentifierTypeDef] = [
+                {"Key": item["Key"], "VersionId": item["VersionId"]} for item in items if match(item["Key"])
+            ]
+            if not keys:
+                break
+            self._delete_batch(client, bucket, keys)
+            deleted += len(keys)
+            yield deleted
+    except (BotoCoreError, ClientError) as error:
+        raise map_botocore_error(error) from error
 ```
 
 `Callable`, `Iterator`, and `ObjectIdentifierTypeDef` are already imported in the `TYPE_CHECKING` block at the top of the file — no import changes are needed.
@@ -389,19 +392,20 @@ and the worker's call:
 In `src/awst/screens/buckets.py`, replace `action_empty` and `_on_empty_confirmed` (lines 77–87) with:
 
 ```python
-    def action_empty(self: Self) -> None:
-        name = self._cursor_name(self.query_one("#items", DataTable))
-        bucket = next((item for item in self._all_items if item.name == name), None)
-        if bucket is None:
-            return
-        question = f"Permanently delete all objects, versions, and delete markers in {bucket.name}?"
-        self.app.push_screen(ConfirmScreen(question), partial(self._on_empty_confirmed, bucket))
+def action_empty(self: Self) -> None:
+    name = self._cursor_name(self.query_one("#items", DataTable))
+    bucket = next((item for item in self._all_items if item.name == name), None)
+    if bucket is None:
+        return
+    question = f"Permanently delete all objects, versions, and delete markers in {bucket.name}?"
+    self.app.push_screen(ConfirmScreen(question), partial(self._on_empty_confirmed, bucket))
 
-    def _on_empty_confirmed(self: Self, bucket: BucketSummary, confirmed: bool | None) -> None:  # noqa: FBT001
-        if not confirmed:
-            return
-        screen = EmptyBucketScreen(self._gateway, bucket.name, bucket.region)
-        self.app.push_screen(screen, self._on_empty_finished)
+
+def _on_empty_confirmed(self: Self, bucket: BucketSummary, confirmed: bool | None) -> None:  # noqa: FBT001
+    if not confirmed:
+        return
+    screen = EmptyBucketScreen(self._gateway, bucket.name, bucket.region)
+    self.app.push_screen(screen, self._on_empty_finished)
 ```
 
 `BucketSummary` is already imported at runtime in that module (line 9), and `partial` on line 3.
@@ -739,25 +743,28 @@ In `tests/fakes.py`, replace the `FakeS3Gateway` constructor parameters and the 
 and `empty_bucket` is replaced by these three methods plus one shared generator:
 
 ```python
-    def empty_bucket(self: Self, name: str, region: str) -> Iterator[int]:
-        self.emptied.append((name, region))
-        return self._deletions()
+def empty_bucket(self: Self, name: str, region: str) -> Iterator[int]:
+    self.emptied.append((name, region))
+    return self._deletions()
 
-    def delete_object(self: Self, bucket: str, region: str, key: str) -> Iterator[int]:
-        self.deleted.append(("object", bucket, region, key))
-        return self._deletions()
 
-    def delete_prefix(self: Self, bucket: str, region: str, prefix: str) -> Iterator[int]:
-        self.deleted.append(("prefix", bucket, region, prefix))
-        return self._deletions()
+def delete_object(self: Self, bucket: str, region: str, key: str) -> Iterator[int]:
+    self.deleted.append(("object", bucket, region, key))
+    return self._deletions()
 
-    def _deletions(self: Self) -> Iterator[int]:
-        for index, count in enumerate(self.delete_batches):
-            if index > 0 and self.delete_gate is not None:
-                self.delete_gate.wait(timeout=5)  # lets tests freeze the worker mid-delete
-            yield count
-        if self.delete_error is not None:
-            raise self.delete_error
+
+def delete_prefix(self: Self, bucket: str, region: str, prefix: str) -> Iterator[int]:
+    self.deleted.append(("prefix", bucket, region, prefix))
+    return self._deletions()
+
+
+def _deletions(self: Self) -> Iterator[int]:
+    for index, count in enumerate(self.delete_batches):
+        if index > 0 and self.delete_gate is not None:
+            self.delete_gate.wait(timeout=5)  # lets tests freeze the worker mid-delete
+        yield count
+    if self.delete_error is not None:
+        raise self.delete_error
 ```
 
 - [ ] **Step 4: Update the other fake call sites**
@@ -1231,24 +1238,26 @@ class ObjectListScreen(ResourceListScreen[ObjectEntry]):
 Append the delete flow at the end of the class, after `on_data_table_row_selected`:
 
 ```python
-    def action_delete(self: Self) -> None:
-        target = self._cursor_name(self.query_one("#items", DataTable))
-        if target is None:
-            return
-        if target.endswith("/"):
-            question = f"Permanently delete everything under {target}, including all versions?"
-        else:
-            question = f"Permanently delete {target} and all its versions?"
-        self.app.push_screen(ConfirmScreen(question), partial(self._on_delete_confirmed, target))
+def action_delete(self: Self) -> None:
+    target = self._cursor_name(self.query_one("#items", DataTable))
+    if target is None:
+        return
+    if target.endswith("/"):
+        question = f"Permanently delete everything under {target}, including all versions?"
+    else:
+        question = f"Permanently delete {target} and all its versions?"
+    self.app.push_screen(ConfirmScreen(question), partial(self._on_delete_confirmed, target))
 
-    def _on_delete_confirmed(self: Self, target: str, confirmed: bool | None) -> None:  # noqa: FBT001
-        if not confirmed:
-            return
-        screen = DeleteObjectsScreen(self._gateway, self._bucket, self._region, target)
-        self.app.push_screen(screen, self._on_delete_finished)
 
-    def _on_delete_finished(self: Self, result: None) -> None:  # noqa: ARG002
-        self.action_refresh()
+def _on_delete_confirmed(self: Self, target: str, confirmed: bool | None) -> None:  # noqa: FBT001
+    if not confirmed:
+        return
+    screen = DeleteObjectsScreen(self._gateway, self._bucket, self._region, target)
+    self.app.push_screen(screen, self._on_delete_finished)
+
+
+def _on_delete_finished(self: Self, result: None) -> None:  # noqa: ARG002
+    self.action_refresh()
 ```
 
 - [ ] **Step 4: Run the object list suite**

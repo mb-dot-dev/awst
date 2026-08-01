@@ -1003,20 +1003,22 @@ Replace `_render_rows` with:
 Replace `action_back` with these three methods:
 
 ```python
-    def on_input_changed(self: Self, event: Input.Changed) -> None:
-        if event.input.id == "filter":
-            self._render_rows()
+def on_input_changed(self: Self, event: Input.Changed) -> None:
+    if event.input.id == "filter":
+        self._render_rows()
 
-    def action_focus_filter(self: Self) -> None:
-        self.query_one("#filter", Input).focus()
 
-    def action_back_or_clear(self: Self) -> None:
-        filter_input = self.query_one("#filter", Input)
-        if filter_input.has_focus or filter_input.value:
-            filter_input.value = ""
-            self.query_one("#stacks", DataTable).focus()
-        else:
-            self.app.pop_screen()
+def action_focus_filter(self: Self) -> None:
+    self.query_one("#filter", Input).focus()
+
+
+def action_back_or_clear(self: Self) -> None:
+    filter_input = self.query_one("#filter", Input)
+    if filter_input.has_focus or filter_input.value:
+        filter_input.value = ""
+        self.query_one("#stacks", DataTable).focus()
+    else:
+        self.app.pop_screen()
 ```
 
 (`Input` doesn't consume `escape`, so the screen binding fires while the filter has focus; printable keys like `r` and `/` are consumed by the focused `Input`, so those bindings only apply from the table.)
@@ -1112,18 +1114,19 @@ Add the `r` binding to `BINDINGS`:
 Add the action and the cursor helper:
 
 ```python
-    def action_refresh(self: Self) -> None:
-        if self._all_stacks:
-            self.query_one("#count", Static).update("refreshing…")
-        else:
-            self.query_one("#stacks", DataTable).loading = True
-        self._fetch_stacks()
+def action_refresh(self: Self) -> None:
+    if self._all_stacks:
+        self.query_one("#count", Static).update("refreshing…")
+    else:
+        self.query_one("#stacks", DataTable).loading = True
+    self._fetch_stacks()
 
-    def _cursor_stack_name(self: Self, table: DataTable) -> str | None:
-        if table.row_count == 0:
-            return None
-        row_key, _ = table.coordinate_to_cell_key(table.cursor_coordinate)
-        return row_key.value
+
+def _cursor_stack_name(self: Self, table: DataTable) -> str | None:
+    if table.row_count == 0:
+        return None
+    row_key, _ = table.coordinate_to_cell_key(table.cursor_coordinate)
+    return row_key.value
 ```
 
 In `_render_rows`, capture the cursor before `table.clear()` and restore it after the add-row loop. The full method becomes:
@@ -1299,32 +1302,33 @@ Add the error panel to `compose`:
 Replace `on_worker_state_changed` and add `_show_error`:
 
 ```python
-    def on_worker_state_changed(self: Self, event: "Worker.StateChanged") -> None:
-        if event.worker.name != "_fetch_stacks":
-            return
-        if event.state == WorkerState.SUCCESS:
-            self._all_stacks = event.worker.result or []
-            self._loaded = True
-            self.query_one("#stacks", DataTable).loading = False
-            self._render_rows()
-        elif event.state == WorkerState.ERROR:
-            error = event.worker.error
-            if isinstance(error, AwsError):
-                self._show_error(error)
-            elif error is not None:
-                raise error
+def on_worker_state_changed(self: Self, event: "Worker.StateChanged") -> None:
+    if event.worker.name != "_fetch_stacks":
+        return
+    if event.state == WorkerState.SUCCESS:
+        self._all_stacks = event.worker.result or []
+        self._loaded = True
+        self.query_one("#stacks", DataTable).loading = False
+        self._render_rows()
+    elif event.state == WorkerState.ERROR:
+        error = event.worker.error
+        if isinstance(error, AwsError):
+            self._show_error(error)
+        elif error is not None:
+            raise error
 
-    def _show_error(self: Self, error: AwsError) -> None:
-        if self._loaded:
-            self.notify(error.message, title="Refresh failed", severity="error")
-            self._render_rows()  # restores the count text over "refreshing…"
-            return
-        table = self.query_one("#stacks", DataTable)
-        table.loading = False
-        table.display = False
-        panel = self.query_one("#error", Static)
-        panel.update(error.message if error.hint is None else f"{error.message}\n{error.hint}")
-        panel.display = True
+
+def _show_error(self: Self, error: AwsError) -> None:
+    if self._loaded:
+        self.notify(error.message, title="Refresh failed", severity="error")
+        self._render_rows()  # restores the count text over "refreshing…"
+        return
+    table = self.query_one("#stacks", DataTable)
+    table.loading = False
+    table.display = False
+    panel = self.query_one("#error", Static)
+    panel.update(error.message if error.hint is None else f"{error.message}\n{error.hint}")
+    panel.display = True
 ```
 
 Replace `action_refresh` so retry hides the panel first:

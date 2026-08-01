@@ -609,6 +609,7 @@ from awst.screens.queues import QueueListScreen
 Replace the disabled SQS entry in `SERVICES`:
 
 ```python
+(
     ServiceEntry(
         option_id="sqs",
         name="SQS",
@@ -616,6 +617,7 @@ Replace the disabled SQS entry in `SERVICES`:
         enabled=True,
         screen_factory=lambda app: QueueListScreen(app.sqs_gateway),
     ),
+)
 ```
 
 - [ ] **Step 5: Run the app tests to verify they pass**

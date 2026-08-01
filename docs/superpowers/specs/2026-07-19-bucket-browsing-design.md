@@ -24,15 +24,16 @@ Read-only — no object actions (view, download, delete) in this version.
 ```python
 @dataclass(frozen=True, slots=True)
 class ObjectSummary:
-    key: str            # full key
-    size: int           # bytes
+    key: str  # full key
+    size: int  # bytes
     modified: datetime
+
 
 @dataclass(frozen=True, slots=True)
 class ObjectPage:
-    folders: tuple[str, ...]           # common prefixes, each ending "/"
+    folders: tuple[str, ...]  # common prefixes, each ending "/"
     objects: tuple[ObjectSummary, ...]
-    continuation_token: str | None     # None when this is the last page
+    continuation_token: str | None  # None when this is the last page
 ```
 
 ## Gateway (`src/awst/aws/s3.py`)

@@ -353,7 +353,9 @@ def _event_time(event: StackEvent) -> datetime:
     return event.timestamp
 
 
-def _to_detail(stack: StackTypeDef, resources: tuple[StackResource, ...], events: tuple[StackEvent, ...]) -> StackDetail:
+def _to_detail(
+    stack: StackTypeDef, resources: tuple[StackResource, ...], events: tuple[StackEvent, ...]
+) -> StackDetail:
     created = stack["CreationTime"]
     return StackDetail(
         name=stack["StackName"],
@@ -1350,22 +1352,23 @@ Expected: `test_confirming_delete_calls_gateway_and_notifies` and `test_delete_f
 In `src/awst/screens/stack_detail.py`, extend `on_worker_state_changed` and add `_handle_delete`:
 
 ```python
-    def on_worker_state_changed(self: Self, event: Worker.StateChanged) -> None:
-        if event.worker.name == "_fetch_detail":
-            self._handle_fetch(event)
-        elif event.worker.name == "_request_delete":
-            self._handle_delete(event)
+def on_worker_state_changed(self: Self, event: Worker.StateChanged) -> None:
+    if event.worker.name == "_fetch_detail":
+        self._handle_fetch(event)
+    elif event.worker.name == "_request_delete":
+        self._handle_delete(event)
 
-    def _handle_delete(self: Self, event: Worker.StateChanged) -> None:
-        if event.state == WorkerState.SUCCESS:
-            self.notify("Delete requested — press r to check progress.", title=self._stack_name)
-        elif event.state == WorkerState.ERROR:
-            error = event.worker.error
-            if isinstance(error, AwsError):
-                message = error.message if error.hint is None else f"{error.message} ({error.hint})"
-                self.notify(message, title="Delete failed", severity="error")
-            elif error is not None:
-                raise error
+
+def _handle_delete(self: Self, event: Worker.StateChanged) -> None:
+    if event.state == WorkerState.SUCCESS:
+        self.notify("Delete requested — press r to check progress.", title=self._stack_name)
+    elif event.state == WorkerState.ERROR:
+        error = event.worker.error
+        if isinstance(error, AwsError):
+            message = error.message if error.hint is None else f"{error.message} ({error.hint})"
+            self.notify(message, title="Delete failed", severity="error")
+        elif error is not None:
+            raise error
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
@@ -1488,14 +1491,15 @@ Change the constructor annotation:
 Add the two handlers after `on_input_changed`:
 
 ```python
-    def on_data_table_row_selected(self: Self, event: DataTable.RowSelected) -> None:
-        name = event.row_key.value
-        if name is not None:
-            self.app.push_screen(StackDetailScreen(self._gateway, name))
+def on_data_table_row_selected(self: Self, event: DataTable.RowSelected) -> None:
+    name = event.row_key.value
+    if name is not None:
+        self.app.push_screen(StackDetailScreen(self._gateway, name))
 
-    def on_screen_resume(self: Self) -> None:
-        if self._loaded:  # skip the initial push; on_mount already fetches
-            self.action_refresh()
+
+def on_screen_resume(self: Self) -> None:
+    if self._loaded:  # skip the initial push; on_mount already fetches
+        self.action_refresh()
 ```
 
 In `src/awst/app.py`, retype the gateway (the `TYPE_CHECKING` import changes from `StackLister` to `StackGateway`):

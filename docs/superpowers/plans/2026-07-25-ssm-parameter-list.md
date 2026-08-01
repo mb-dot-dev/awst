@@ -741,6 +741,7 @@ from awst.screens.parameters import ParameterListScreen
 and append to `SERVICES`, after the SQS entry:
 
 ```python
+(
     ServiceEntry(
         option_id="ssm",
         name="SSM",
@@ -748,6 +749,7 @@ and append to `SERVICES`, after the SQS entry:
         enabled=True,
         screen_factory=lambda app: ParameterListScreen(app.ssm_gateway),
     ),
+)
 ```
 
 - [ ] **Step 5: Run the tests to verify they pass**

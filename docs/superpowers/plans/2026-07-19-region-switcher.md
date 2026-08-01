@@ -456,50 +456,54 @@ from typing import TYPE_CHECKING, ClassVar, Self
 5. Replace `on_mount` and `_on_profile_selected` with versions that use a shared sub-title helper:
 
 ```python
-    def on_mount(self: Self) -> None:
-        self._refresh_sub_title()
-        if profiles.active_profile() is not None:
-            self.push_screen(HomeScreen())
-            return
-        names = profiles.available_profiles()
-        if names:
-            self.push_screen(ProfileSelectScreen(names), self._on_profile_selected)
-        else:
-            self.push_screen(HomeScreen())
-
-    def _on_profile_selected(self: Self, name: str | None) -> None:
-        if name is not None:
-            profiles.select_profile(name)
-            self._refresh_sub_title()
+def on_mount(self: Self) -> None:
+    self._refresh_sub_title()
+    if profiles.active_profile() is not None:
+        self.push_screen(HomeScreen())
+        return
+    names = profiles.available_profiles()
+    if names:
+        self.push_screen(ProfileSelectScreen(names), self._on_profile_selected)
+    else:
         self.push_screen(HomeScreen())
 
-    def _refresh_sub_title(self: Self) -> None:
-        parts = [part for part in (profiles.active_profile(), regions.active_region()) if part]
-        self.sub_title = " @ ".join(parts)
+
+def _on_profile_selected(self: Self, name: str | None) -> None:
+    if name is not None:
+        profiles.select_profile(name)
+        self._refresh_sub_title()
+    self.push_screen(HomeScreen())
+
+
+def _refresh_sub_title(self: Self) -> None:
+    parts = [part for part in (profiles.active_profile(), regions.active_region()) if part]
+    self.sub_title = " @ ".join(parts)
 ```
 
 6. Add the region-switch action, its guard, and the selection callback:
 
 ```python
-    def check_action(self: Self, action: str, parameters: tuple[object, ...]) -> bool | None:  # noqa: ARG002
-        if action == "switch_region":
-            return any(isinstance(screen, HomeScreen) for screen in self.screen_stack)
-        return True
+def check_action(self: Self, action: str, parameters: tuple[object, ...]) -> bool | None:  # noqa: ARG002
+    if action == "switch_region":
+        return any(isinstance(screen, HomeScreen) for screen in self.screen_stack)
+    return True
 
-    def action_switch_region(self: Self) -> None:
-        if isinstance(self.screen, RegionSelectScreen):
-            return
-        picker = RegionSelectScreen(regions.available_regions(), regions.active_region())
-        self.push_screen(picker, self._on_region_selected)
 
-    def _on_region_selected(self: Self, name: str | None) -> None:
-        if name is None:
-            return
-        regions.select_region(name)
-        self.reset_gateways()
-        while not isinstance(self.screen, HomeScreen):
-            self.pop_screen()
-        self._refresh_sub_title()
+def action_switch_region(self: Self) -> None:
+    if isinstance(self.screen, RegionSelectScreen):
+        return
+    picker = RegionSelectScreen(regions.available_regions(), regions.active_region())
+    self.push_screen(picker, self._on_region_selected)
+
+
+def _on_region_selected(self: Self, name: str | None) -> None:
+    if name is None:
+        return
+    regions.select_region(name)
+    self.reset_gateways()
+    while not isinstance(self.screen, HomeScreen):
+        self.pop_screen()
+    self._refresh_sub_title()
 ```
 
 The `check_action` guard keeps `ctrl+g` inert (and out of the footer) on the startup profile picker, where no `HomeScreen` exists yet — `_on_region_selected` pops back to `HomeScreen`, so one must be in the stack.

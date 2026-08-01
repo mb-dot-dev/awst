@@ -82,6 +82,7 @@ def _sort_key(self) -> Callable[[ItemT], Any] | None:
     """Key to keep _all_items sorted after every fetch; None means don't re-sort."""
     return None
 
+
 def _auto_fetch_on_filter(self) -> bool:
     """Whether a non-empty filter should trigger fetching every remaining page."""
     return True

@@ -201,9 +201,7 @@ class PagedApp(App[None]):
 
     def on_mount(self: Self) -> None:
         self.push_screen(
-            PagedScreen(
-                self.pages, fail_more=self.fail_more, gate=self.gate, started=self.started, sort=self.sort
-            )
+            PagedScreen(self.pages, fail_more=self.fail_more, gate=self.gate, started=self.started, sort=self.sort)
         )
 ```
 
@@ -303,32 +301,35 @@ if TYPE_CHECKING:
 Add two new hooks right after `_list_more`:
 
 ```python
-    def _list_more(self: Self) -> list[ItemT]:
-        """Fetch the next page; called on a worker thread, only when _has_more() is true."""
-        raise NotImplementedError
+def _list_more(self: Self) -> list[ItemT]:
+    """Fetch the next page; called on a worker thread, only when _has_more() is true."""
+    raise NotImplementedError
 
-    def _sort_key(self: Self) -> Callable[[ItemT], Any] | None:
-        """Key to keep _all_items sorted after every fetch; None (the default) means don't re-sort."""
-        return None
 
-    def _auto_fetch_on_filter(self: Self) -> bool:
-        """Whether a non-empty filter should trigger fetching every remaining page."""
-        return True
+def _sort_key(self: Self) -> Callable[[ItemT], Any] | None:
+    """Key to keep _all_items sorted after every fetch; None (the default) means don't re-sort."""
+    return None
+
+
+def _auto_fetch_on_filter(self: Self) -> bool:
+    """Whether a non-empty filter should trigger fetching every remaining page."""
+    return True
 ```
 
 Add a new worker right after `_fetch_more`:
 
 ```python
-    @work(thread=True, exclusive=True, exit_on_error=False)
-    def _fetch_more(self: Self) -> list[ItemT]:
-        return self._list_more()
+@work(thread=True, exclusive=True, exit_on_error=False)
+def _fetch_more(self: Self) -> list[ItemT]:
+    return self._list_more()
 
-    @work(thread=True, exclusive=True, exit_on_error=False)
-    def _fetch_remaining(self: Self) -> list[ItemT]:
-        items: list[ItemT] = []
-        while self._has_more():
-            items.extend(self._list_more())
-        return items
+
+@work(thread=True, exclusive=True, exit_on_error=False)
+def _fetch_remaining(self: Self) -> list[ItemT]:
+    items: list[ItemT] = []
+    while self._has_more():
+        items.extend(self._list_more())
+    return items
 ```
 
 Update `on_worker_state_changed` to recognize the new worker and apply the sort key:
@@ -377,18 +378,19 @@ Update `on_worker_state_changed` to recognize the new worker and apply the sort 
 Add a helper and call it from `on_input_changed`:
 
 ```python
-    def on_input_changed(self: Self, event: Input.Changed) -> None:
-        if event.input.id == "filter":
-            self._render_rows()
-            self._maybe_fetch_remaining()
+def on_input_changed(self: Self, event: Input.Changed) -> None:
+    if event.input.id == "filter":
+        self._render_rows()
+        self._maybe_fetch_remaining()
 
-    def _maybe_fetch_remaining(self: Self) -> None:
-        query = self.query_one("#filter", Input).value.strip()
-        if query and self._auto_fetch_on_filter() and self._has_more() and not self._loading_more:
-            self._loading_more = True
-            self.refresh_bindings()
-            self.query_one("#count", Static).update("searching…")
-            self._fetch_remaining()
+
+def _maybe_fetch_remaining(self: Self) -> None:
+    query = self.query_one("#filter", Input).value.strip()
+    if query and self._auto_fetch_on_filter() and self._has_more() and not self._loading_more:
+        self._loading_more = True
+        self.refresh_bindings()
+        self.query_one("#count", Static).update("searching…")
+        self._fetch_remaining()
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -1606,11 +1608,12 @@ Expected: FAIL — the base class default (`_auto_fetch_on_filter` returning `Tr
 In `src/awst/screens/objects.py`, add the override to `ObjectListScreen` (placed next to `_has_more`/`_list_more`):
 
 ```python
-    def _has_more(self: Self) -> bool:
-        return self._continuation_token is not None
+def _has_more(self: Self) -> bool:
+    return self._continuation_token is not None
 
-    def _auto_fetch_on_filter(self: Self) -> bool:
-        return False  # a prefix can hold millions of keys; stay scoped to loaded objects
+
+def _auto_fetch_on_filter(self: Self) -> bool:
+    return False  # a prefix can hold millions of keys; stay scoped to loaded objects
 ```
 
 - [ ] **Step 4: Run test to verify it passes**

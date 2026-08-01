@@ -85,7 +85,7 @@ def make_detail(
 class FakeCloudFormationGateway:
     """In-memory stand-in for the real CloudFormation gateway."""
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self: Self,
         stacks: list[StackSummary] | None = None,
         error: AwsError | None = None,
@@ -142,7 +142,7 @@ def make_object(key: str, size: int = 2048) -> ObjectSummary:
 class FakeS3Gateway:
     """In-memory stand-in for the real S3 gateway."""
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self: Self,
         buckets: list[BucketSummary] | None = None,
         error: AwsError | None = None,
@@ -301,7 +301,7 @@ def make_parameter_detail(
 class FakeSsmGateway:
     """In-memory stand-in for the real SSM gateway."""
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self: Self,
         parameters: list[ParameterSummary] | None = None,
         error: AwsError | None = None,

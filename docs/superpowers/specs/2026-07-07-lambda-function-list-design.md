@@ -23,7 +23,7 @@ class FunctionSummary:
     """A Lambda function, reduced to what the UI needs."""
 
     name: str
-    runtime: str        # "" for container-image functions (no Runtime field)
+    runtime: str  # "" for container-image functions (no Runtime field)
     memory_mb: int
     timeout_s: int
     modified: datetime

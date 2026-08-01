@@ -876,6 +876,7 @@ from awst.screens.buckets import BucketListScreen
 and replace the S3 `ServiceEntry` line with:
 
 ```python
+(
     ServiceEntry(
         option_id="s3",
         name="S3",
@@ -883,6 +884,7 @@ and replace the S3 `ServiceEntry` line with:
         enabled=True,
         screen_factory=lambda app: BucketListScreen(app.s3_gateway),
     ),
+)
 ```
 
 - [ ] **Step 5: Run the app tests to verify they pass**

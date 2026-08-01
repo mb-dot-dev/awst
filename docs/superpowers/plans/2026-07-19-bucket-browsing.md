@@ -222,48 +222,49 @@ Replace `S3Gateway.__init__` with:
 Add these methods to `S3Gateway` (after `list_buckets`, before `empty_bucket`):
 
 ```python
-    def list_objects(
-        self: Self,
-        bucket: str,
-        region: str,
-        prefix: str = "",
-        continuation_token: str | None = None,
-    ) -> ObjectPage:
-        """Return one page (up to 1000 keys) of one prefix level of the bucket.
+def list_objects(
+    self: Self,
+    bucket: str,
+    region: str,
+    prefix: str = "",
+    continuation_token: str | None = None,
+) -> ObjectPage:
+    """Return one page (up to 1000 keys) of one prefix level of the bucket.
 
-        Folders are the level's common prefixes; the zero-byte "folder marker"
-        object equal to the prefix itself is filtered out. Raises AwsError for
-        any credential, network, or API failure.
-        """
-        client = self._client_for(region)
-        try:
-            if continuation_token is None:
-                page = client.list_objects_v2(Bucket=bucket, Prefix=prefix, Delimiter="/", MaxKeys=1000)
-            else:
-                page = client.list_objects_v2(
-                    Bucket=bucket,
-                    Prefix=prefix,
-                    Delimiter="/",
-                    MaxKeys=1000,
-                    ContinuationToken=continuation_token,
-                )
-        except (BotoCoreError, ClientError) as error:
-            raise map_botocore_error(error) from error
-        folders = tuple(entry["Prefix"] for entry in page.get("CommonPrefixes", []) if "Prefix" in entry)
-        objects = tuple(
-            ObjectSummary(key=obj["Key"], size=obj["Size"], modified=obj["LastModified"])
-            for obj in page.get("Contents", [])
-            if obj["Key"] != prefix
-        )
-        return ObjectPage(folders=folders, objects=objects, continuation_token=page.get("NextContinuationToken"))
+    Folders are the level's common prefixes; the zero-byte "folder marker"
+    object equal to the prefix itself is filtered out. Raises AwsError for
+    any credential, network, or API failure.
+    """
+    client = self._client_for(region)
+    try:
+        if continuation_token is None:
+            page = client.list_objects_v2(Bucket=bucket, Prefix=prefix, Delimiter="/", MaxKeys=1000)
+        else:
+            page = client.list_objects_v2(
+                Bucket=bucket,
+                Prefix=prefix,
+                Delimiter="/",
+                MaxKeys=1000,
+                ContinuationToken=continuation_token,
+            )
+    except (BotoCoreError, ClientError) as error:
+        raise map_botocore_error(error) from error
+    folders = tuple(entry["Prefix"] for entry in page.get("CommonPrefixes", []) if "Prefix" in entry)
+    objects = tuple(
+        ObjectSummary(key=obj["Key"], size=obj["Size"], modified=obj["LastModified"])
+        for obj in page.get("Contents", [])
+        if obj["Key"] != prefix
+    )
+    return ObjectPage(folders=folders, objects=objects, continuation_token=page.get("NextContinuationToken"))
 
-    def _client_for(self: Self, region: str) -> S3Client:
-        """The base client for the home (or unknown) region, a cached regional client otherwise."""
-        if not region or region == self._client.meta.region_name or self._regional_client_factory is None:
-            return self._client
-        if region not in self._regional_clients:
-            self._regional_clients[region] = self._regional_client_factory(region)
-        return self._regional_clients[region]
+
+def _client_for(self: Self, region: str) -> S3Client:
+    """The base client for the home (or unknown) region, a cached regional client otherwise."""
+    if not region or region == self._client.meta.region_name or self._regional_client_factory is None:
+        return self._client
+    if region not in self._regional_clients:
+        self._regional_clients[region] = self._regional_client_factory(region)
+    return self._regional_clients[region]
 ```
 
 - [ ] **Step 5: Run the tests to verify they pass**
@@ -540,19 +541,20 @@ Expected: FAILs — `check_action("load_more", ())` returns `True` (base default
 Add the binding to `BINDINGS` (after the `"l"`/login entry):
 
 ```python
-        ("m", "load_more", "More"),
+(("m", "load_more", "More"),)
 ```
 
 Add the two hooks right after `_item_name` (line 57):
 
 ```python
-    def _has_more(self: Self) -> bool:
-        """Whether _list_more can fetch another page; paged subclasses override both."""
-        return False
+def _has_more(self: Self) -> bool:
+    """Whether _list_more can fetch another page; paged subclasses override both."""
+    return False
 
-    def _list_more(self: Self) -> list[ItemT]:
-        """Fetch the next page; called on a worker thread, only when _has_more() is true."""
-        raise NotImplementedError
+
+def _list_more(self: Self) -> list[ItemT]:
+    """Fetch the next page; called on a worker thread, only when _has_more() is true."""
+    raise NotImplementedError
 ```
 
 Extend `check_action` to gate the new binding:
@@ -569,15 +571,16 @@ Extend `check_action` to gate the new binding:
 Add the worker and action (after `_fetch_items`):
 
 ```python
-    @work(thread=True, exclusive=True, exit_on_error=False)
-    def _fetch_more(self: Self) -> list[ItemT]:
-        return self._list_more()
+@work(thread=True, exclusive=True, exit_on_error=False)
+def _fetch_more(self: Self) -> list[ItemT]:
+    return self._list_more()
 
-    def action_load_more(self: Self) -> None:
-        if not self._has_more():
-            return
-        self.query_one("#count", Static).update("loading more…")
-        self._fetch_more()
+
+def action_load_more(self: Self) -> None:
+    if not self._has_more():
+        return
+    self.query_one("#count", Static).update("loading more…")
+    self._fetch_more()
 ```
 
 Rework `on_worker_state_changed` to handle both workers (replace the whole method):
@@ -669,8 +672,8 @@ def make_object(key: str, size: int = 2048) -> ObjectSummary:
 Extend `FakeS3Gateway.__init__` with two new keyword parameters (after `empty_gate`) and two new attributes:
 
 ```python
-        object_pages: dict[tuple[str, str | None], ObjectPage] | None = None,
-        objects_error: AwsError | None = None,
+object_pages: dict[tuple[str, str | None], ObjectPage] | None = (None,)
+objects_error: AwsError | None = (None,)
 ```
 
 and in the body:

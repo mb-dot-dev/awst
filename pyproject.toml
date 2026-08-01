@@ -107,6 +107,8 @@ select = [
 # Tests can have more flexible rules
 "tests/**/*.py" = [
     "ARG001",  # Pytest fixtures appear as unused function arguments
+    "PLR0913", # Too many arguments in function / method
+    "PLR0917", # Too many local variables in function / method
     "PLR2004", # Magic value used in comparison
     "PLC0415", # Local imports inside test functions are a common pattern
     "S101",    # Use of assert
